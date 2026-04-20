@@ -2030,14 +2030,44 @@ function renderAssets() {
   const al = state.assets.filter(a => getAssetTypeInfo(a.type).kind === 'asset');
   const dl = state.assets.filter(a => getAssetTypeInfo(a.type).kind === 'debt');
   let html = '';
+
+  // 자산 분류별 그룹
   if (al.length > 0) {
-    const sum = al.reduce((s,a) => s+getAssetCurrentBalance(a.id), 0);
-    html += `<div class="tx-list"><div class="tx-section-header"><div class="tx-section-date">내 자산</div><div class="tx-section-sum" style="color:var(--primary);font-weight:700;">${fmt(sum)}원</div></div>${al.map(renderAssetItem).join('')}</div>`;
+    const totalAssets = al.reduce((s,a) => s+getAssetCurrentBalance(a.id), 0);
+    html += `<div style="padding:4px 20px 8px;display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--text-sub);font-weight:600;">내 자산</span><span style="font-size:13px;font-weight:700;color:var(--primary);">${fmt(totalAssets)}원</span></div>`;
+    // ASSET_TYPES 순서대로 그룹화
+    ASSET_TYPES.filter(t => t.kind === 'asset').forEach(typeInfo => {
+      const group = al.filter(a => a.type === typeInfo.key);
+      if (group.length === 0) return;
+      const groupSum = group.reduce((s,a) => s+getAssetCurrentBalance(a.id), 0);
+      html += `<div style="margin:0 20px 10px;border-radius:16px;overflow:hidden;border:1px solid var(--border-line);">
+        <div style="padding:12px 16px 10px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);">
+          <span style="font-size:13px;font-weight:700;color:var(--text);">${typeInfo.emoji} ${typeInfo.key}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;">${fmt(groupSum)}원</span>
+        </div>
+        <div style="background:var(--card);">${group.map(renderAssetItem).join('')}</div>
+      </div>`;
+    });
   }
+
+  // 부채 그룹
   if (dl.length > 0) {
-    const sum = dl.reduce((s,a) => s+Math.abs(getAssetCurrentBalance(a.id)), 0);
-    html += `<div class="tx-list"><div class="tx-section-header"><div class="tx-section-date">부채</div><div class="tx-section-sum" style="color:var(--danger);font-weight:700;">-${fmt(sum)}원</div></div>${dl.map(renderAssetItem).join('')}</div>`;
+    const totalDebt = dl.reduce((s,a) => s+Math.abs(getAssetCurrentBalance(a.id)), 0);
+    html += `<div style="padding:12px 20px 8px;display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--text-sub);font-weight:600;">부채</span><span style="font-size:13px;font-weight:700;color:var(--danger);">-${fmt(totalDebt)}원</span></div>`;
+    ASSET_TYPES.filter(t => t.kind === 'debt').forEach(typeInfo => {
+      const group = dl.filter(a => a.type === typeInfo.key);
+      if (group.length === 0) return;
+      const groupSum = group.reduce((s,a) => s+Math.abs(getAssetCurrentBalance(a.id)), 0);
+      html += `<div style="margin:0 20px 10px;border-radius:16px;overflow:hidden;border:1px solid var(--danger-light);">
+        <div style="padding:12px 16px 10px;display:flex;justify-content:space-between;align-items:center;background:var(--danger-light);">
+          <span style="font-size:13px;font-weight:700;color:var(--danger);">${typeInfo.emoji} ${typeInfo.key}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--danger);font-variant-numeric:tabular-nums;">-${fmt(groupSum)}원</span>
+        </div>
+        <div style="background:var(--card);">${group.map(renderAssetItem).join('')}</div>
+      </div>`;
+    });
   }
+
   content.innerHTML = html;
 }
 
