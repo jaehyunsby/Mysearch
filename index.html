@@ -297,6 +297,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .goal-due{font-size:11px;color:var(--text-sub)}
 .goal-due.near{color:var(--warning);font-weight:600}
 .goal-due.overdue{color:var(--danger);font-weight:600}
+.goal-subitem{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);}
+.goal-subitem:first-child{border-top:none;}
+.goal-subitem-check{width:22px;height:22px;border-radius:6px;border:2px solid var(--border-line);background:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:white;font-size:12px;transition:all .15s;padding:0;}
+.goal-subitem-check.done{background:var(--success);border-color:var(--success);}
+.goal-subitem-check.done::before{content:'✓'}
+.goal-subitem-label{flex:1;font-size:14px;}
+.goal-subitem-label.done{text-decoration:line-through;color:var(--text-sub);}
+.goal-sub-card{background:var(--bg);border-radius:12px;padding:10px 14px;margin-top:6px;}
 .stepper-row{display:flex;align-items:center;gap:8px;}
 .stepper-btn{width:44px;height:44px;border-radius:12px;background:var(--bg);border:1.5px solid var(--border-line);font-size:22px;font-weight:400;color:var(--text);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .1s;}
 .stepper-btn:active{background:var(--border-line);}
@@ -644,12 +652,28 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div></div>
     <div class="form-group"><label class="form-label">마감일 (선택)</label><input type="date" class="form-input" id="todo-due-date"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:12px;">
-      <div><div style="font-weight:600;font-size:15px;">🔁 매월 반복</div><div style="font-size:12px;color:var(--text-sub);margin-top:2px;">매달 자동으로 새 할일 생성</div></div>
+      <div><div style="font-weight:600;font-size:15px;">🔁 반복</div><div style="font-size:12px;color:var(--text-sub);margin-top:2px;">자동으로 새 할일 생성</div></div>
       <button id="todo-recurring-toggle" class="toggle-switch" onclick="toggleTodoRecurring()"></button>
     </div>
     <div id="todo-recurring-day-wrap" style="display:none;" class="form-group">
-      <label class="form-label">매월 며칠?</label>
-      <div class="stepper-row"><button class="stepper-btn" onclick="stepField('todo-recurring-day',-1)">−</button><input type="number" class="form-input stepper-input" id="todo-recurring-day" min="1" max="28" value="1" style="text-align:center;"><button class="stepper-btn" onclick="stepField('todo-recurring-day',1)">+</button></div>
+      <label class="form-label">반복 주기</label>
+      <div class="segmented" id="todo-recur-type-seg" style="margin-bottom:12px;">
+        <button data-rtype="month" class="active" onclick="setTodoRecurType('month')">매월</button>
+        <button data-rtype="year" onclick="setTodoRecurType('year')">매년</button>
+      </div>
+      <div id="todo-recur-month-wrap">
+        <label class="form-label">매월 며칠?</label>
+        <div class="stepper-row"><button class="stepper-btn" onclick="stepField('todo-recurring-day',-1)">−</button><input type="number" class="form-input stepper-input" id="todo-recurring-day" min="1" max="28" value="1" style="text-align:center;"><button class="stepper-btn" onclick="stepField('todo-recurring-day',1)">+</button></div>
+      </div>
+      <div id="todo-recur-year-wrap" style="display:none;">
+        <label class="form-label">매년 몇 월 며칠?</label>
+        <div style="display:flex;gap:8px;">
+          <div class="stepper-row" style="flex:1;"><button class="stepper-btn" onclick="stepField('todo-recurring-month',-1)">−</button><input type="number" class="form-input stepper-input" id="todo-recurring-month" min="1" max="12" value="1" style="text-align:center;"><button class="stepper-btn" onclick="stepField('todo-recurring-month',1)">+</button></div>
+          <span style="line-height:44px;color:var(--text-sub);font-weight:600;">월</span>
+          <div class="stepper-row" style="flex:1;"><button class="stepper-btn" onclick="stepField('todo-recurring-yday',-1)">−</button><input type="number" class="form-input stepper-input" id="todo-recurring-yday" min="1" max="31" value="1" style="text-align:center;"><button class="stepper-btn" onclick="stepField('todo-recurring-yday',1)">+</button></div>
+          <span style="line-height:44px;color:var(--text-sub);font-weight:600;">일</span>
+        </div>
+      </div>
     </div>
     <div class="form-group"><label class="form-label">메모 (선택)</label><textarea class="form-input" id="todo-memo" placeholder="추가 설명" maxlength="500" rows="3" style="resize:vertical;min-height:60px;"></textarea></div>
     <button class="btn-primary" onclick="saveTodo()">저장</button>
@@ -694,16 +718,43 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </div></div>
 
 <!-- GOAL MODAL -->
-<div class="modal-backdrop" id="goal-modal" onclick="if(event.target===this)closeGoalModal()"><div class="modal"><div class="modal-handle"></div>
+<div class="modal-backdrop" id="goal-modal" onclick="if(event.target===this)closeGoalModal()"><div class="modal" style="max-height:96vh;"><div class="modal-handle"></div>
   <div class="modal-header"><div class="modal-title" id="goal-modal-title">새 목표</div><button class="modal-close" onclick="closeGoalModal()">×</button></div>
   <div class="modal-body">
-    <div class="form-group"><label class="form-label">목표</label><input type="text" class="form-input" id="goal-title" placeholder="예: 제주도 여행" maxlength="80"></div>
+    <div class="form-group"><label class="form-label">목표</label><input type="text" class="form-input" id="goal-title" placeholder="예: 세계일주" maxlength="80"></div>
     <div class="form-group"><label class="form-label">카테고리</label><div class="category-grid" id="goal-category-grid"></div></div>
     <div class="form-group"><label class="form-label">목표일 (선택)</label><input type="date" class="form-input" id="goal-target-date"></div>
+    <!-- 진행률 입력 방식 -->
     <div class="form-group">
+      <label class="form-label">진행률 방식</label>
+      <div class="segmented" id="goal-progress-type-seg">
+        <button data-ptype="slider" class="active" onclick="setGoalProgressType('slider')">슬라이더</button>
+        <button data-ptype="value" onclick="setGoalProgressType('value')">목표/현재</button>
+        <button data-ptype="subitems" onclick="setGoalProgressType('subitems')">소분류</button>
+      </div>
+    </div>
+    <!-- 슬라이더 -->
+    <div id="goal-ptype-slider" class="form-group">
       <label class="form-label">진행률 <span id="goal-progress-val" style="color:var(--primary);font-weight:700;">0%</span></label>
       <input type="range" min="0" max="100" step="5" id="goal-progress" value="0" style="width:100%;accent-color:var(--primary);" oninput="document.getElementById('goal-progress-val').textContent=this.value+'%'">
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-placeholder);margin-top:2px;"><span>0%</span><span>50%</span><span>100%</span></div>
+    </div>
+    <!-- 목표/현재 수치 -->
+    <div id="goal-ptype-value" style="display:none;" class="form-group">
+      <div style="display:flex;gap:10px;align-items:flex-end;">
+        <div style="flex:1;"><label class="form-label">목표</label><input type="number" class="form-input" id="goal-target-val" placeholder="100" min="0" oninput="calcGoalValueProgress()" style="text-align:right;"></div>
+        <div style="flex:1;"><label class="form-label">현재</label><input type="number" class="form-input" id="goal-current-val" placeholder="0" min="0" oninput="calcGoalValueProgress()" style="text-align:right;"></div>
+        <div style="padding:14px 0;font-size:20px;font-weight:800;color:var(--primary);min-width:52px;text-align:center;" id="goal-value-pct">0%</div>
+      </div>
+    </div>
+    <!-- 소분류 -->
+    <div id="goal-ptype-subitems" style="display:none;" class="form-group">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label class="form-label" style="margin:0;">소분류 항목</label>
+        <span id="goal-sub-pct" style="color:var(--primary);font-weight:700;font-size:14px;">0%</span>
+      </div>
+      <div id="goal-subitems-list"></div>
+      <button onclick="addGoalSubitem()" class="btn-secondary" style="margin-top:8px;">+ 항목 추가</button>
     </div>
     <div class="form-group"><label class="form-label">메모 (선택)</label><textarea class="form-input" id="goal-memo" placeholder="세부 계획, 이유 등" maxlength="500" rows="3" style="resize:vertical;min-height:60px;"></textarea></div>
     <button class="btn-secondary" id="goal-done-btn" onclick="toggleGoalDone()" style="display:none;">🎉 달성 완료 표시</button>
@@ -757,10 +808,10 @@ let budgetSub = 'history';
 let txModal = {editingId:null,type:'expense',amount:0,accumulator:0,pendingOp:null,justEvaluated:false,category:null,subCategory:'',accountId:'',fromAccountId:'',toAccountId:'',date:null,memo:''};
 let recModal = {editingId:null, type:'expense', category:null, payMethod:''};
 let assetModal = {editingId:null, type:null, includeInTotal:true};
-let todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1};
+let todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1, recurType:'month', recurringMonth:1};
 let noteModal = {editingId:null, tags:[], color:'', folder:'', pinned:false};
 let bookmarkModal = {editingId:null, folder:''};
-let goalModal = {editingId:null, category:null, done:false};
+let goalModal = {editingId:null, category:null, done:false, progressType:'slider', subitems:[], targetVal:0, currentVal:0};
 let historyFilter = 'all'; let historySearch = ''; let statsTab = 'month';
 let todoFilter = 'active'; let todoSearch = '';
 let noteSearch = ''; let noteFolder = 'all'; let noteTagFilter = null;
@@ -1965,9 +2016,16 @@ function deleteAsset() {
 function renderAssetItem(a) {
   const info = getAssetTypeInfo(a.type);
   const isDebt = info.kind === 'debt';
-  const sign = isDebt ? '-' : '';
-  const cls = isDebt ? 'expense' : 'income';
   const bal = getAssetCurrentBalance(a.id);
+  // 자산 계좌도 잔액이 음수면 빨간색 - 표시
+  let sign, cls;
+  if (isDebt) {
+    sign = '-'; cls = 'expense';
+  } else if (bal < 0) {
+    sign = '-'; cls = 'expense';
+  } else {
+    sign = ''; cls = 'income';
+  }
   let subtitle;
   if (a.type === '보험' && a.insurance) {
     const ins = a.insurance;
@@ -2145,34 +2203,46 @@ function handlePinComplete() {
 // ========== TODOS ==========
 function generateRecurringTodos() {
   const now = new Date();
+  const curYear = now.getFullYear();
   const curMk = monthKey(now);
   state.recurringTodoGenerated = state.recurringTodoGenerated || {};
   (state.todos || []).filter(t => t.recurring && !t.recurringFrom).forEach(template => {
-    // 생성월: 템플릿 생성달 ~ 현재달
     const start = new Date(template.createdAt); start.setDate(1);
-    const cur = new Date(start);
-    while (monthKey(cur) <= curMk) {
-      const mk = monthKey(cur);
-      const genKey = template.id + '-' + mk;
-      if (!state.recurringTodoGenerated[genKey]) {
-        const day = template.recurringDay || 1;
-        const lastDay = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
-        const useDay = Math.min(day, lastDay);
-        const dateStr = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(useDay).padStart(2,'0');
-        // 템플릿 자신의 달은 자기 자신이 대표하므로 별도 생성 안 함
-        const templateMk = monthKey(new Date(template.createdAt));
-        if (mk !== templateMk) {
-          state.todos.push({
-            id:'todo_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-            title:template.title, priority:template.priority||0,
-            dueDate:dateStr, memo:template.memo||'',
-            done:false, doneAt:null, recurringFrom:template.id,
-            createdAt:Date.now()
-          });
+    const recurType = template.recurType || 'month';
+
+    if (recurType === 'month') {
+      const cur = new Date(start);
+      while (monthKey(cur) <= curMk) {
+        const mk = monthKey(cur);
+        const genKey = template.id + '-' + mk;
+        if (!state.recurringTodoGenerated[genKey]) {
+          const templateMk = monthKey(new Date(template.createdAt));
+          if (mk !== templateMk) {
+            const day = template.recurringDay || 1;
+            const lastDay = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+            const useDay = Math.min(day, lastDay);
+            const dateStr = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(useDay).padStart(2,'0');
+            state.todos.push({id:'todo_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), title:template.title, priority:template.priority||0, dueDate:dateStr, memo:template.memo||'', done:false, doneAt:null, recurringFrom:template.id, createdAt:Date.now()});
+          }
+          state.recurringTodoGenerated[genKey] = true;
         }
-        state.recurringTodoGenerated[genKey] = true;
+        cur.setMonth(cur.getMonth()+1);
       }
-      cur.setMonth(cur.getMonth()+1);
+    } else if (recurType === 'year') {
+      const startYear = new Date(template.createdAt).getFullYear();
+      for (let y = startYear; y <= curYear; y++) {
+        const genKey = template.id + '-year-' + y;
+        if (!state.recurringTodoGenerated[genKey]) {
+          const templateYear = new Date(template.createdAt).getFullYear();
+          if (y !== templateYear) {
+            const m = template.recurringMonth || 1;
+            const d = template.recurringDay || 1;
+            const dateStr = y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+            state.todos.push({id:'todo_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), title:template.title, priority:template.priority||0, dueDate:dateStr, memo:template.memo||'', done:false, doneAt:null, recurringFrom:template.id, createdAt:Date.now()});
+          }
+          state.recurringTodoGenerated[genKey] = true;
+        }
+      }
     }
   });
 }
@@ -2224,6 +2294,12 @@ function renderTodos() {
   }
   list.innerHTML = `<div class="todo-list-wrap">${items.map(renderTodoItem).join('')}</div>`;
 }
+function setTodoRecurType(t) {
+  todoModal.recurType = t;
+  document.querySelectorAll('#todo-recur-type-seg button').forEach(b => b.classList.toggle('active', b.dataset.rtype === t));
+  document.getElementById('todo-recur-month-wrap').style.display = t === 'month' ? 'block' : 'none';
+  document.getElementById('todo-recur-year-wrap').style.display = t === 'year' ? 'block' : 'none';
+}
 function toggleTodoRecurring() {
   todoModal.recurring = !todoModal.recurring;
   const toggle = document.getElementById('todo-recurring-toggle');
@@ -2235,14 +2311,14 @@ function openTodoModal(id) {
   if (id) {
     const t = (state.todos || []).find(x => x.id === id);
     if (!t) return;
-    todoModal = {editingId:id, priority:t.priority||0, recurring:!!t.recurring, recurringDay:t.recurringDay||1};
+    todoModal = {editingId:id, priority:t.priority||0, recurring:!!t.recurring, recurringDay:t.recurringDay||1, recurType:t.recurType||'month', recurringMonth:t.recurringMonth||1};
     document.getElementById('todo-modal-title').textContent = '할일 수정';
     document.getElementById('todo-title').value = t.title || '';
     document.getElementById('todo-due-date').value = t.dueDate || '';
     document.getElementById('todo-memo').value = t.memo || '';
     document.getElementById('todo-delete-btn').style.display = 'block';
   } else {
-    todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1};
+    todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1, recurType:'month', recurringMonth:1};
     document.getElementById('todo-modal-title').textContent = '새 할일';
     document.getElementById('todo-title').value = '';
     document.getElementById('todo-due-date').value = '';
@@ -2256,6 +2332,11 @@ function openTodoModal(id) {
   if (wrap) wrap.style.display = todoModal.recurring ? 'block' : 'none';
   const dayEl = document.getElementById('todo-recurring-day');
   if (dayEl) dayEl.value = todoModal.recurringDay;
+  const monthEl = document.getElementById('todo-recurring-month');
+  if (monthEl) monthEl.value = todoModal.recurringMonth;
+  const ydayEl = document.getElementById('todo-recurring-yday');
+  if (ydayEl) ydayEl.value = todoModal.recurringDay;
+  setTodoRecurType(todoModal.recurType || 'month');
   document.getElementById('todo-modal').classList.add('active');
   setTimeout(() => document.getElementById('todo-title').focus(), 200);
 }
@@ -2268,14 +2349,19 @@ function saveTodo() {
   const title = document.getElementById('todo-title').value.trim();
   const dueDate = document.getElementById('todo-due-date').value || null;
   const memo = document.getElementById('todo-memo').value.trim();
-  const recurringDay = todoModal.recurring ? Math.max(1, Math.min(28, +document.getElementById('todo-recurring-day').value || 1)) : null;
+  const recurType = todoModal.recurring ? (todoModal.recurType || 'month') : null;
+  const recurringDay = todoModal.recurring ? (recurType === 'year'
+    ? Math.max(1, Math.min(31, +document.getElementById('todo-recurring-yday').value || 1))
+    : Math.max(1, Math.min(28, +document.getElementById('todo-recurring-day').value || 1))) : null;
+  const recurringMonth = (todoModal.recurring && recurType === 'year')
+    ? Math.max(1, Math.min(12, +document.getElementById('todo-recurring-month').value || 1)) : null;
   if (!title) { alert('할일을 입력하세요'); return; }
   state.todos = state.todos || [];
   if (todoModal.editingId) {
     const t = state.todos.find(x => x.id === todoModal.editingId);
-    if (t) { t.title = title; t.dueDate = dueDate; t.memo = memo; t.priority = todoModal.priority; t.recurring = todoModal.recurring; t.recurringDay = recurringDay; t.updatedAt = Date.now(); }
+    if (t) { t.title = title; t.dueDate = dueDate; t.memo = memo; t.priority = todoModal.priority; t.recurring = todoModal.recurring; t.recurringDay = recurringDay; t.recurType = recurType; t.recurringMonth = recurringMonth; t.updatedAt = Date.now(); }
   } else {
-    state.todos.push({id:'todo_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), title, priority:todoModal.priority, dueDate, memo, done:false, doneAt:null, recurring:todoModal.recurring, recurringDay, createdAt:Date.now()});
+    state.todos.push({id:'todo_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), title, priority:todoModal.priority, dueDate, memo, done:false, doneAt:null, recurring:todoModal.recurring, recurringDay, recurType, recurringMonth, createdAt:Date.now()});
   }
   if (todoModal.recurring) generateRecurringTodos();
   save(); closeTodoModal(); render();
@@ -2458,10 +2544,35 @@ function addNoteTag(t) {
   renderNoteModalChips(); renderNoteModalTagSuggestions();
 }
 document.addEventListener('keydown', e => {
+  // 메모 태그 입력
   if (e.target.id === 'note-tag-input' && e.key === 'Enter') {
     e.preventDefault();
     const v = e.target.value.trim();
     if (v) { addNoteTag(v); e.target.value = ''; }
+    return;
+  }
+  // input/textarea에 포커스 있으면 나머지 무시
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  // PIN 오버레이 활성 시 숫자/백스페이스
+  if (document.getElementById('pin-overlay').classList.contains('active')) {
+    if (e.key >= '0' && e.key <= '9') { e.preventDefault(); pinPress(+e.key); }
+    else if (e.key === 'Backspace') { e.preventDefault(); pinPress('del'); }
+    return;
+  }
+
+  // 계산기(TX 모달) 활성 시
+  if (document.getElementById('tx-modal').classList.contains('active')) {
+    if (e.key >= '0' && e.key <= '9') { e.preventDefault(); keypadPress(e.key); }
+    else if (e.key === 'Backspace') { e.preventDefault(); keypadPress('del'); }
+    else if (e.key === 'Delete') { e.preventDefault(); keypadPress('C'); }
+    else if (e.key === '+') { e.preventDefault(); keypadPress('+'); }
+    else if (e.key === '-') { e.preventDefault(); keypadPress('-'); }
+    else if (e.key === '*') { e.preventDefault(); keypadPress('×'); }
+    else if (e.key === '/') { e.preventDefault(); keypadPress('÷'); }
+    else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); keypadPress('='); }
+    return;
   }
 });
 function renderNoteModalFolderSelect() {
@@ -2748,9 +2859,62 @@ function daysDiff(dateStr) {
   const diff = Math.ceil((new Date(dateStr+'T00:00:00') - new Date(today()+'T00:00:00')) / 86400000);
   return diff;
 }
+function setGoalProgressType(t) {
+  goalModal.progressType = t;
+  document.querySelectorAll('#goal-progress-type-seg button').forEach(b => b.classList.toggle('active', b.dataset.ptype === t));
+  document.getElementById('goal-ptype-slider').style.display = t === 'slider' ? 'block' : 'none';
+  document.getElementById('goal-ptype-value').style.display = t === 'value' ? 'block' : 'none';
+  document.getElementById('goal-ptype-subitems').style.display = t === 'subitems' ? 'block' : 'none';
+}
+function calcGoalValueProgress() {
+  const target = +document.getElementById('goal-target-val').value || 0;
+  const current = +document.getElementById('goal-current-val').value || 0;
+  const pct = target > 0 ? Math.round((current / target) * 100) : 0;
+  document.getElementById('goal-value-pct').textContent = pct + '%';
+  goalModal.targetVal = target; goalModal.currentVal = current;
+}
+function addGoalSubitem(text) {
+  goalModal.subitems.push({id:'sub_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), text:text||'', done:false});
+  renderGoalSubitems();
+}
+function toggleGoalSubitem(idx) {
+  if (goalModal.subitems[idx]) goalModal.subitems[idx].done = !goalModal.subitems[idx].done;
+  renderGoalSubitemsPct();
+  renderGoalSubitems();
+}
+function deleteGoalSubitem(idx) {
+  goalModal.subitems.splice(idx, 1);
+  renderGoalSubitemsPct();
+  renderGoalSubitems();
+}
+function renderGoalSubitemsPct() {
+  const total = goalModal.subitems.length;
+  const done = goalModal.subitems.filter(s => s.done).length;
+  const pct = total > 0 ? Math.round((done/total)*100) : 0;
+  const el = document.getElementById('goal-sub-pct');
+  if (el) el.textContent = pct + '%';
+}
+function renderGoalSubitems() {
+  const el = document.getElementById('goal-subitems-list');
+  if (!el) return;
+  if (goalModal.subitems.length === 0) { el.innerHTML = `<div style="text-align:center;color:var(--text-sub);font-size:13px;padding:12px 0;">항목을 추가해보세요</div>`; return; }
+  el.innerHTML = `<div class="goal-sub-card">` + goalModal.subitems.map((s,i) =>
+    `<div class="goal-subitem"><button class="goal-subitem-check ${s.done?'done':''}" onclick="toggleGoalSubitem(${i})"></button><input type="text" value="${escapeHtml(s.text)}" placeholder="예: 일본" class="form-input" style="flex:1;padding:8px 10px;font-size:14px;" oninput="goalModal.subitems[${i}].text=this.value"><button onclick="deleteGoalSubitem(${i})" style="background:none;border:none;color:var(--text-placeholder);font-size:18px;padding:4px;">×</button></div>`
+  ).join('') + `</div>`;
+  renderGoalSubitemsPct();
+}
+function getGoalProgress(g) {
+  if (g.progressType === 'subitems' && g.subitems && g.subitems.length > 0) {
+    return Math.round((g.subitems.filter(s=>s.done).length / g.subitems.length) * 100);
+  }
+  if (g.progressType === 'value' && g.targetVal > 0) {
+    return Math.round(((g.currentVal||0) / g.targetVal) * 100);
+  }
+  return g.progress || 0;
+}
 function renderGoalCard(g) {
   const cat = getGoalCatInfo(g.category);
-  const pct = Math.min(100, Math.max(0, g.progress || 0));
+  const pct = Math.min(100, Math.max(0, getGoalProgress(g)));
   const doneCls = g.done ? 'done' : '';
   const titleCls = g.done ? 'done' : '';
   let dueHtml = '';
@@ -2764,10 +2928,18 @@ function renderGoalCard(g) {
     else { dueText = g.targetDate; }
     dueHtml = `<span class="${dueCls}">📅 ${dueText}</span>`;
   }
-  const doneBadge = g.done ? `<div class="goal-done-badge">🎉 달성완료${g.doneAt ? ' · ' + noteFormattedDate(g.doneAt) : ''}</div>` : '';
-  const progressSection = !g.done ? `<div class="goal-progress-wrap"><div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${pct}%;"></div></div><div class="goal-progress-label"><span>진행률</span><span style="color:var(--primary);font-weight:700;">${pct}%</span></div></div>` : '';
+  const doneBadge = g.done ? `<div class="goal-done-badge">🎉 달성완료${g.doneAt ? ' · '+noteFormattedDate(g.doneAt):''}</div>` : '';
+  const progressSection = !g.done ? `<div class="goal-progress-wrap"><div class="goal-progress-bar"><div class="goal-progress-fill" style="width:${pct}%;"></div></div><div class="goal-progress-label"><span>${g.progressType==='value'?`${fmt(g.currentVal||0)}/${fmt(g.targetVal||0)}`:'진행률'}</span><span style="color:var(--primary);font-weight:700;">${pct}%</span></div></div>` : '';
   const memo = g.memo ? `<div style="font-size:12px;color:var(--text-sub);margin-top:6px;">${escapeHtml(g.memo)}</div>` : '';
-  return `<div class="goal-card ${doneCls}" onclick="openGoalModal('${g.id}')" style="border-left-color:${g.done ? 'var(--success)' : cat.color}"><div class="goal-card-header"><span class="goal-emoji">${cat.emoji}</span><div class="goal-card-info"><div class="goal-card-title ${titleCls}">${escapeHtml(g.title)}</div><div class="goal-card-meta">${cat.key}</div>${doneBadge}</div></div>${progressSection}${memo}<div class="goal-card-footer">${dueHtml}</div></div>`;
+  // 소분류 미리보기
+  let subHtml = '';
+  if (g.progressType === 'subitems' && g.subitems && g.subitems.length > 0) {
+    const preview = g.subitems.slice(0, 4);
+    subHtml = `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;">` + preview.map(s =>
+      `<span style="padding:3px 10px;border-radius:10px;font-size:12px;font-weight:500;background:${s.done?'var(--success)':'var(--bg)'};color:${s.done?'white':'var(--text-sub)'};text-decoration:${s.done?'line-through':'none'};">${escapeHtml(s.text||'')}</span>`
+    ).join('') + (g.subitems.length > 4 ? `<span style="padding:3px 10px;font-size:12px;color:var(--text-placeholder);">+${g.subitems.length-4}</span>` : '') + `</div>`;
+  }
+  return `<div class="goal-card ${doneCls}" onclick="openGoalModal('${g.id}')" style="border-left-color:${g.done?'var(--success)':cat.color}"><div class="goal-card-header"><span class="goal-emoji">${cat.emoji}</span><div class="goal-card-info"><div class="goal-card-title ${titleCls}">${escapeHtml(g.title)}</div><div class="goal-card-meta">${cat.key}</div>${doneBadge}</div></div>${progressSection}${subHtml}${memo}<div class="goal-card-footer">${dueHtml}</div></div>`;
 }
 function renderGoals() {
   const list = document.getElementById('goals-list');
@@ -2793,13 +2965,16 @@ function openGoalModal(id) {
   if (id) {
     const g = (state.goals || []).find(x => x.id === id);
     if (!g) return;
-    goalModal = {editingId:id, category:g.category||null, done:!!g.done};
+    goalModal = {editingId:id, category:g.category||null, done:!!g.done, progressType:g.progressType||'slider', subitems:JSON.parse(JSON.stringify(g.subitems||[])), targetVal:g.targetVal||0, currentVal:g.currentVal||0};
     document.getElementById('goal-modal-title').textContent = '목표 수정';
     document.getElementById('goal-title').value = g.title || '';
     document.getElementById('goal-target-date').value = g.targetDate || '';
     document.getElementById('goal-progress').value = g.progress || 0;
-    document.getElementById('goal-progress-val').textContent = (g.progress || 0) + '%';
+    document.getElementById('goal-progress-val').textContent = (g.progress||0) + '%';
     document.getElementById('goal-memo').value = g.memo || '';
+    document.getElementById('goal-target-val').value = g.targetVal || '';
+    document.getElementById('goal-current-val').value = g.currentVal || '';
+    document.getElementById('goal-value-pct').textContent = Math.round(((g.currentVal||0)/(g.targetVal||1))*100) + '%';
     document.getElementById('goal-delete-btn').style.display = 'block';
     const doneBtn = document.getElementById('goal-done-btn');
     doneBtn.style.display = 'block';
@@ -2807,17 +2982,22 @@ function openGoalModal(id) {
     doneBtn.style.background = g.done ? 'var(--bg)' : '#E6F7EF';
     doneBtn.style.color = g.done ? 'var(--text-sub)' : 'var(--success)';
   } else {
-    goalModal = {editingId:null, category:null, done:false};
+    goalModal = {editingId:null, category:null, done:false, progressType:'slider', subitems:[], targetVal:0, currentVal:0};
     document.getElementById('goal-modal-title').textContent = '새 목표';
     document.getElementById('goal-title').value = '';
     document.getElementById('goal-target-date').value = '';
     document.getElementById('goal-progress').value = 0;
     document.getElementById('goal-progress-val').textContent = '0%';
     document.getElementById('goal-memo').value = '';
+    document.getElementById('goal-target-val').value = '';
+    document.getElementById('goal-current-val').value = '';
+    document.getElementById('goal-value-pct').textContent = '0%';
     document.getElementById('goal-delete-btn').style.display = 'none';
     document.getElementById('goal-done-btn').style.display = 'none';
   }
   renderGoalCategoryGrid();
+  setGoalProgressType(goalModal.progressType);
+  renderGoalSubitems();
   document.getElementById('goal-modal').classList.add('active');
 }
 function closeGoalModal() { document.getElementById('goal-modal').classList.remove('active'); }
@@ -2833,28 +3013,46 @@ function toggleGoalDone() {
   btn.textContent = goalModal.done ? '↩ 달성 취소' : '🎉 달성 완료 표시';
   btn.style.background = goalModal.done ? 'var(--bg)' : '#E6F7EF';
   btn.style.color = goalModal.done ? 'var(--text-sub)' : 'var(--success)';
-  if (goalModal.done) document.getElementById('goal-progress').value = 100, document.getElementById('goal-progress-val').textContent = '100%';
+  if (goalModal.done && goalModal.progressType === 'slider') {
+    document.getElementById('goal-progress').value = 100;
+    document.getElementById('goal-progress-val').textContent = '100%';
+  }
 }
 function saveGoal() {
   const title = document.getElementById('goal-title').value.trim();
   if (!title) { alert('목표를 입력하세요'); return; }
-  const progress = +document.getElementById('goal-progress').value || 0;
   const targetDate = document.getElementById('goal-target-date').value || null;
   const memo = document.getElementById('goal-memo').value.trim();
+  const progressType = goalModal.progressType;
+  // 진행률 계산
+  let progress = 0;
+  let targetVal = 0, currentVal = 0;
+  let subitems = goalModal.subitems;
+  if (progressType === 'slider') {
+    progress = +document.getElementById('goal-progress').value || 0;
+  } else if (progressType === 'value') {
+    targetVal = +document.getElementById('goal-target-val').value || 0;
+    currentVal = +document.getElementById('goal-current-val').value || 0;
+    progress = targetVal > 0 ? Math.round((currentVal/targetVal)*100) : 0;
+  } else if (progressType === 'subitems') {
+    // 소분류 텍스트 최신화
+    document.querySelectorAll('#goal-subitems-list input[type=text]').forEach((inp, i) => { if (subitems[i]) subitems[i].text = inp.value.trim(); });
+    subitems = subitems.filter(s => s.text);
+    const done = subitems.filter(s => s.done).length;
+    progress = subitems.length > 0 ? Math.round((done/subitems.length)*100) : 0;
+  }
   state.goals = state.goals || [];
   if (goalModal.editingId) {
     const g = state.goals.find(x => x.id === goalModal.editingId);
     if (g) {
       const wasDone = g.done;
-      g.title = title; g.category = goalModal.category; g.targetDate = targetDate;
-      g.progress = goalModal.done ? 100 : progress; g.memo = memo;
-      g.done = goalModal.done;
-      if (!wasDone && goalModal.done) g.doneAt = Date.now();
+      Object.assign(g, {title, category:goalModal.category, targetDate, progress, memo, progressType, targetVal, currentVal, subitems, done:goalModal.done});
+      if (goalModal.done && !wasDone) g.doneAt = Date.now();
       else if (!goalModal.done) g.doneAt = null;
       g.updatedAt = Date.now();
     }
   } else {
-    state.goals.push({id:'goal_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), title, category:goalModal.category, targetDate, progress, memo, done:false, doneAt:null, createdAt:Date.now(), updatedAt:Date.now()});
+    state.goals.push({id:'goal_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), title, category:goalModal.category, targetDate, progress, memo, progressType, targetVal, currentVal, subitems, done:false, doneAt:null, createdAt:Date.now(), updatedAt:Date.now()});
   }
   save(); closeGoalModal(); render();
 }
