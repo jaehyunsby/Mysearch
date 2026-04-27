@@ -906,20 +906,14 @@ async function syncPull() {
     const { data, error } = await sb.from('user_data').select('data, updated_at').eq('user_id', authUser.id).maybeSingle();
     if (error) throw error;
     if (data && data.data && Object.keys(data.data).length > 0) {
-      const cloudUpdatedAt = new Date(data.updated_at).getTime();
-      const localUpdatedAt = state._localUpdatedAt || 0;
-      if (localUpdatedAt > cloudUpdatedAt) {
-        // 로컬이 더 최신 → 클라우드로 push
-        await syncPush();
-      } else {
-        // 클라우드가 더 최신 → 로컬 덮어쓰기
-        const cloud = migrate(data.data);
-        state = {...JSON.parse(JSON.stringify(defaultData)), ...cloud};
-        saveLocal();
-        render();
-        showSync('✓ 가져왔어요');
-      }
+      // 클라우드 데이터로 로컬 덮어쓰기 (로그인 시 항상 클라우드 우선)
+      const cloud = migrate(data.data);
+      state = {...JSON.parse(JSON.stringify(defaultData)), ...cloud};
+      saveLocal();
+      render();
+      showSync('✓ 가져왔어요');
     } else {
+      // 클라우드 비어있음 → 현재 로컬 올리기
       await syncPush();
     }
   } catch (e) {
@@ -953,6 +947,9 @@ async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
     authUser = session.user;
+    // 로컬 초기화 후 클라우드 데이터 로드 (다른 계정 데이터 오염 방지)
+    localStorage.removeItem(STORAGE_KEY);
+    state = JSON.parse(JSON.stringify(defaultData));
     hideLoginOverlay();
     await syncPull();
     startApp();
@@ -988,6 +985,8 @@ async function handleLoginSubmit() {
       if (error) throw error;
       if (data.user) {
         authUser = data.user;
+        localStorage.removeItem(STORAGE_KEY);
+        state = JSON.parse(JSON.stringify(defaultData));
         hideLoginOverlay();
         await syncPull();
         startApp();
@@ -998,6 +997,8 @@ async function handleLoginSubmit() {
       const { data, error } = await sb.auth.signInWithPassword({email, password});
       if (error) throw error;
       authUser = data.user;
+      localStorage.removeItem(STORAGE_KEY);
+      state = JSON.parse(JSON.stringify(defaultData));
       hideLoginOverlay();
       await syncPull();
       startApp();
@@ -1012,9 +1013,14 @@ async function handleLoginSubmit() {
 function skipLogin() { hideLoginOverlay(); startApp(); }
 async function signOut() {
   if (!sb || !authUser) return;
-  if (!confirm('로그아웃 할까요? (로컬 데이터는 유지됩니다)')) return;
+  if (!confirm('로그아웃 할까요?')) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  await syncPush(); // 마지막 저장
   await sb.auth.signOut();
   authUser = null;
+  // 로컬 데이터 초기화 (다음 사람 데이터 노출 방지)
+  localStorage.removeItem(STORAGE_KEY);
+  state = JSON.parse(JSON.stringify(defaultData));
   showLoginOverlay();
 }
 
