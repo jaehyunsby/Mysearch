@@ -536,18 +536,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="form-group"><label class="form-label">이름</label><input type="text" class="form-input" id="rec-name" placeholder="예: 월세, 넷플릭스"></div>
     <div class="form-group"><label class="form-label">금액</label><input type="number" class="form-input" id="rec-amount" placeholder="0"></div>
     <div class="form-group"><label class="form-label">카테고리</label><div class="category-grid" id="rec-category-grid"></div></div>
-    <div class="form-group"><label class="form-label">자산 (선택)</label><select class="form-input" id="rec-account"><option value="">연결 안함</option></select></div>
     <div class="form-group"><label class="form-label">매달 며칠?</label><input type="number" class="form-input" id="rec-day" min="1" max="31" value="1"></div>
-    <div class="form-group"><label class="form-label">결제방법</label>
-      <div class="segmented" id="rec-paymethod-seg">
+    <div class="form-group"><label class="form-label">결제 수단</label>
+      <div class="segmented" id="rec-paymethod-seg" style="margin-bottom:10px;">
         <button data-method="" class="active" onclick="setRecPayMethod('')">미지정</button>
         <button data-method="카드" onclick="setRecPayMethod('카드')">💳 카드</button>
-        <button data-method="현금" onclick="setRecPayMethod('현금')">💵 현금/계좌</button>
+        <button data-method="현금" onclick="setRecPayMethod('현금')">🏦 계좌</button>
       </div>
-    </div>
-    <div id="rec-payname-wrap" style="display:none;" class="form-group">
-      <label class="form-label" id="rec-payname-label">카드명</label>
-      <input type="text" class="form-input" id="rec-payname" placeholder="예: 신한카드, 카카오뱅크" maxlength="30">
+      <div id="rec-pay-detail" style="display:none;">
+        <select class="form-input" id="rec-account" style="margin-bottom:8px;" onchange="onRecAssetSelect()">
+          <option value="">자산 직접 선택 (선택사항)</option>
+        </select>
+        <input type="text" class="form-input" id="rec-payname" placeholder="카드/계좌명 직접 입력" maxlength="30">
+        <div style="font-size:12px;color:var(--text-sub);margin-top:6px;">자산 선택 시 잔액 자동 차감</div>
+      </div>
     </div>
     <button class="btn-primary" onclick="saveRecurring()">저장</button>
     <button class="btn-danger" id="rec-delete-btn" onclick="deleteRecurring()" style="display:none;">삭제</button>
@@ -591,10 +593,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
     <div id="asset-realestate-group" style="display:none;">
       <div class="form-group"><label class="form-label">시세</label><input type="number" class="form-input" id="asset-re-market" placeholder="0" style="text-align:right;font-size:18px;font-weight:700;" oninput="calcRealestateEquity()"></div>
-      <div class="form-group"><label class="form-label">대출금액</label><input type="number" class="form-input" id="asset-re-loan" placeholder="0" style="text-align:right;" oninput="calcRealestateEquity()"></div>
+      <div class="form-group">
+        <label class="form-label">대출금액 (원래 설정값)</label>
+        <input type="number" class="form-input" id="asset-re-loan" placeholder="0" style="text-align:right;" oninput="calcRealestateEquity()">
+        <div id="asset-re-loan-current" style="display:none;margin-top:8px;padding:10px 14px;background:var(--danger-light);border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;color:var(--danger);">이체 상환 후 현재 잔액</span>
+          <span id="asset-re-loan-current-val" style="font-weight:700;color:var(--danger);font-variant-numeric:tabular-nums;"></span>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">투입금액 <span style="font-size:11px;color:var(--text-placeholder);">(매입가·추가투자 합계)</span></label><input type="number" class="form-input" id="asset-re-invested" placeholder="0" style="text-align:right;" oninput="calcRealestateEquity()"></div>
       <div id="asset-re-summary" style="background:var(--primary-light);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:none;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-size:13px;color:var(--text-sub);">순자산 반영액 (시세−대출)</span><span id="asset-re-equity" style="font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;"></span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-size:13px;color:var(--text-sub);">순자산 반영액 (시세−현재대출)</span><span id="asset-re-equity" style="font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;"></span></div>
         <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--text-sub);">평가손익 (순자산−투입)</span><span id="asset-re-gain" style="font-weight:700;font-variant-numeric:tabular-nums;"></span></div>
       </div>
     </div>
@@ -801,7 +810,7 @@ let currentMonth = new Date(); currentMonth.setDate(1);
 let currentPage = 'home';
 let budgetSub = 'history';
 let txModal = {editingId:null,type:'expense',amount:0,accumulator:0,pendingOp:null,justEvaluated:false,category:null,subCategory:'',accountId:'',fromAccountId:'',toAccountId:'',date:null,memo:''};
-let recModal = {editingId:null, type:'expense', category:null, payMethod:''};
+let recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:'', accountId:''};
 let assetModal = {editingId:null, type:null, includeInTotal:true};
 let todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1, recurType:'month', recurringMonth:1};
 let noteModal = {editingId:null, tags:[], color:'', folder:'', pinned:false};
@@ -1698,22 +1707,21 @@ function openRecurringEditModal(id) {
   if (id) {
     const r = state.recurring.find(x => x.id === id);
     if (!r) return;
-    recModal = {editingId:id, type:r.type, category:r.category, payMethod: r.payMethod || '', payName: r.payName || ''};
+    recModal = {editingId:id, type:r.type, category:r.category, payMethod: r.payMethod || '', payName: r.payName || '', accountId: r.accountId || ''};
     document.getElementById('rec-name').value = r.name;
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.dayOfMonth;
-    document.getElementById('rec-account').value = r.accountId || '';
     document.getElementById('recurring-edit-title').textContent = '반복 수정';
     document.getElementById('rec-delete-btn').style.display = 'block';
     setRecType(r.type);
     setRecPayMethod(r.payMethod || '');
+    document.getElementById('rec-account').value = r.accountId || '';
     document.getElementById('rec-payname').value = r.payName || '';
   } else {
-    recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:''};
+    recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:'', accountId:''};
     document.getElementById('rec-name').value = '';
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = 1;
-    document.getElementById('rec-account').value = '';
     document.getElementById('rec-payname').value = '';
     document.getElementById('recurring-edit-title').textContent = '반복 추가';
     document.getElementById('rec-delete-btn').style.display = 'none';
@@ -1726,11 +1734,22 @@ function closeRecurringEditModal() { document.getElementById('recurring-edit-mod
 function setRecPayMethod(m) {
   recModal.payMethod = m;
   document.querySelectorAll('#rec-paymethod-seg button').forEach(b => b.classList.toggle('active', b.dataset.method === m));
-  const wrap = document.getElementById('rec-payname-wrap');
-  const label = document.getElementById('rec-payname-label');
-  if (m === '카드') { wrap.style.display = 'block'; label.textContent = '카드명'; }
-  else if (m === '현금') { wrap.style.display = 'block'; label.textContent = '계좌명'; }
-  else { wrap.style.display = 'none'; }
+  const detail = document.getElementById('rec-pay-detail');
+  detail.style.display = m ? 'block' : 'none';
+  // 자산 목록 필터링: 카드는 신용카드, 계좌는 나머지
+  const ni = state.assets.filter(a => m === '카드' ? a.type === '신용카드' : a.type !== '신용카드' && a.type !== '보험' && a.type !== '부동산');
+  const sel = document.getElementById('rec-account');
+  sel.innerHTML = `<option value="">직접 입력 (자산 연결 안함)</option>` + ni.map(a => `<option value="${a.id}">${getAssetTypeInfo(a.type).emoji} ${a.name}</option>`).join('');
+  sel.value = recModal.accountId || '';
+}
+function onRecAssetSelect() {
+  const sel = document.getElementById('rec-account');
+  const assetId = sel.value;
+  if (assetId) {
+    const a = getAsset(assetId);
+    if (a) document.getElementById('rec-payname').value = a.name;
+  }
+  recModal.accountId = assetId;
 }
 function setRecType(t) {
   recModal.type = t;
@@ -1791,6 +1810,18 @@ function openAssetModal(id) {
       document.getElementById('asset-re-invested').value = a.realestate.investedAmount || '';
       document.getElementById('asset-balance').value = '';
       document.getElementById('asset-current-balance-info').style.display = 'none';
+      // 이체 상환 반영한 현재 대출 잔액 표시
+      const currentLoan = getRealEstateLoan(id);
+      const originalLoan = Number(a.realestate.loanAmount) || 0;
+      const repaid = originalLoan - currentLoan;
+      const loanCurrentEl = document.getElementById('asset-re-loan-current');
+      const loanCurrentValEl = document.getElementById('asset-re-loan-current-val');
+      if (repaid > 0 && loanCurrentEl && loanCurrentValEl) {
+        loanCurrentEl.style.display = 'flex';
+        loanCurrentValEl.textContent = fmt(currentLoan) + '원 (↓' + fmt(repaid) + '원 상환)';
+      } else if (loanCurrentEl) {
+        loanCurrentEl.style.display = 'none';
+      }
       calcRealestateEquity();
     } else if (a.type === '저축' && a.savings) {
       document.getElementById('asset-sav-monthly').value = a.savings.monthlyAmount || '';
@@ -1860,6 +1891,8 @@ function copyAsset() {
       document.getElementById('asset-re-market').value = a.realestate.marketValue || '';
       document.getElementById('asset-re-loan').value = a.realestate.loanAmount || '';
       document.getElementById('asset-re-invested').value = a.realestate.investedAmount || '';
+      const lc = document.getElementById('asset-re-loan-current');
+      if (lc) lc.style.display = 'none';
       calcRealestateEquity();
     } else {
       document.getElementById('asset-balance').value = a.initialBalance || '';
@@ -1893,13 +1926,15 @@ function calcInsTotal() {
 }
 function calcRealestateEquity() {
   const market = +document.getElementById('asset-re-market').value || 0;
-  const loan = +document.getElementById('asset-re-loan').value || 0;
+  const originalLoan = +document.getElementById('asset-re-loan').value || 0;
   const invested = +document.getElementById('asset-re-invested').value || 0;
   const summary = document.getElementById('asset-re-summary');
   if (!market) { summary.style.display = 'none'; return; }
   summary.style.display = 'block';
-  const equity = market - loan;
-  const gain = invested ? equity - invested : null; // (시세 - 대출) - 투입 = 실투자 수익
+  // 이체 상환 반영된 현재 대출 잔액 사용
+  const currentLoan = assetModal.editingId ? getRealEstateLoan(assetModal.editingId) : originalLoan;
+  const equity = market - currentLoan;
+  const gain = invested ? equity - invested : null;
   document.getElementById('asset-re-equity').textContent = fmt(equity) + '원';
   const gainEl = document.getElementById('asset-re-gain');
   if (gain !== null) {
@@ -2053,9 +2088,10 @@ function renderAssetItem(a) {
   } else if (a.type === '부동산' && a.realestate) {
     const re = a.realestate;
     const currentLoan = getRealEstateLoan(a.id);
+    const repaid = (Number(re.loanAmount) || 0) - currentLoan;
     const parts = [];
     if (re.marketValue) parts.push('시세 ' + fmt(re.marketValue) + '원');
-    if (re.loanAmount) parts.push('대출 ' + fmt(currentLoan) + '원' + (currentLoan < re.loanAmount ? ` (↓${fmt(re.loanAmount - currentLoan)}원 상환)` : ''));
+    if (re.loanAmount) parts.push('대출 ' + fmt(currentLoan) + '원' + (repaid > 0 ? ` (${fmt(repaid)}원 상환)` : ''));
     subtitle = parts.join(' · ') || a.type;
   } else subtitle = a.memo || a.type;
   return `<div class="tx-item" onclick="openAssetModal('${a.id}')"><div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div><div class="tx-info"><div class="tx-category">${a.name}${a.includeInTotal === false ? ' <span style="font-size:10px;background:var(--border-line);color:var(--text-sub);padding:1px 6px;border-radius:4px;font-weight:600;">집계제외</span>' : ''}</div><div class="tx-memo">${subtitle}</div></div><div class="tx-amount ${cls}">${sign}${fmt(Math.abs(bal))}원</div></div>`;
