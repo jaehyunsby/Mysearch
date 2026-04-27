@@ -1028,20 +1028,26 @@ const getCategoryInfo = (type, key) => (CATEGORIES[type]||[]).find(c => c.key ==
 const getAssetTypeInfo = key => ASSET_TYPES.find(t => t.key === key) || ASSET_TYPES[0];
 const getAsset = id => state.assets.find(a => a.id === id);
 
+function getRealEstateLoan(assetId) {
+  const a = getAsset(assetId);
+  if (!a || !a.realestate) return 0;
+  let loan = Number(a.realestate.loanAmount) || 0;
+  (state.transactions || []).forEach(t => {
+    if (t.type === 'transfer') {
+      if (t.toAccountId === assetId) loan = Math.max(0, loan - t.amount); // 상환
+      if (t.fromAccountId === assetId) loan += t.amount; // 추가 대출
+    }
+  });
+  return Math.max(0, loan);
+}
 function getAssetCurrentBalance(assetId) {
   const a = getAsset(assetId); if (!a) return 0;
   if (a.type === '보험') return Number(a.balance) || 0;
   if (a.type === '저축') return Number(a.balance) || 0;
   if (a.type === '부동산') {
     if (a.realestate) {
-      // 이체로 대출 상환 반영: 이 자산으로 이체 들어오면 대출 감소
-      let loan = Number(a.realestate.loanAmount) || 0;
-      state.transactions.forEach(t => {
-        if (t.type === 'transfer') {
-          if (t.toAccountId === assetId) loan = Math.max(0, loan - t.amount);
-          if (t.fromAccountId === assetId) loan += t.amount;
-        }
-      });
+      // 이체로 대출 상환 반영: getRealEstateLoan 헬퍼 사용
+      const loan = getRealEstateLoan(assetId);
       return (Number(a.realestate.marketValue) || 0) - loan;
     }
     return Number(a.initialBalance) || Number(a.balance) || 0;
@@ -1080,11 +1086,9 @@ function calcNetWorth() {
       ta += Number(a.balance) || 0;
     } else if (a.type === '부동산') {
       if (a.realestate) {
-        // 시세는 총자산에, 대출은 총부채에 따로 반영
         ta += Number(a.realestate.marketValue) || 0;
-        td += Number(a.realestate.loanAmount) || 0;
+        td += getRealEstateLoan(a.id); // 이체 상환 반영된 현재 대출 잔액
       } else {
-        // 구형 데이터: initialBalance를 그대로 총자산에
         ta += Number(a.initialBalance) || Number(a.balance) || 0;
       }
     } else {
@@ -2048,9 +2052,10 @@ function renderAssetItem(a) {
     subtitle = parts.join(' · ') || a.type;
   } else if (a.type === '부동산' && a.realestate) {
     const re = a.realestate;
+    const currentLoan = getRealEstateLoan(a.id);
     const parts = [];
     if (re.marketValue) parts.push('시세 ' + fmt(re.marketValue) + '원');
-    if (re.loanAmount) parts.push('대출 ' + fmt(re.loanAmount) + '원');
+    if (re.loanAmount) parts.push('대출 ' + fmt(currentLoan) + '원' + (currentLoan < re.loanAmount ? ` (↓${fmt(re.loanAmount - currentLoan)}원 상환)` : ''));
     subtitle = parts.join(' · ') || a.type;
   } else subtitle = a.memo || a.type;
   return `<div class="tx-item" onclick="openAssetModal('${a.id}')"><div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div><div class="tx-info"><div class="tx-category">${a.name}${a.includeInTotal === false ? ' <span style="font-size:10px;background:var(--border-line);color:var(--text-sub);padding:1px 6px;border-radius:4px;font-weight:600;">집계제외</span>' : ''}</div><div class="tx-memo">${subtitle}</div></div><div class="tx-amount ${cls}">${sign}${fmt(Math.abs(bal))}원</div></div>`;
