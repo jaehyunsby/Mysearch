@@ -361,12 +361,6 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- HOME -->
   <div class="page active" id="page-home">
     <header class="header"><div class="header-row"><div class="month-switcher"><button class="icon-btn" onclick="changeMonth(-1)">‹</button><div class="month-label" id="home-month-label">2026년 4월</div><button class="icon-btn" onclick="changeMonth(1)">›</button></div><button class="icon-btn" id="home-sync-btn" onclick="handleHomeSync()" title="동기화" style="font-size:18px;">☁</button><button class="icon-btn" onclick="openPage('settings')">⚙</button></div></header>
-    <div id="home-alerts"></div>
-    <div class="summary-card">
-      <div class="summary-title">이번 달 남은 예산</div>
-      <div class="summary-amount"><span id="home-remaining">0</span><span class="unit">원</span></div>
-      <div class="summary-split"><div class="split-item"><div class="split-label">수입</div><div class="split-value" id="home-income">0원</div></div><div class="split-item"><div class="split-label">지출</div><div class="split-value" id="home-expense">0원</div></div></div>
-    </div>
     <div class="card"><div class="card-header"><div class="card-title">순자산</div><button class="card-link" onclick="openBudgetAssets()">자세히</button></div>
       <div style="font-size:26px;font-weight:800;letter-spacing:-0.02em;margin-bottom:14px;" id="home-networth">0원</div>
       <div style="display:flex;gap:10px;"><div style="flex:1;padding:12px 14px;background:var(--primary-light);border-radius:12px;"><div style="font-size:12px;color:var(--text-sub);">총 자산</div><div style="font-weight:700;color:var(--primary);margin-top:2px;font-variant-numeric:tabular-nums;" id="home-total-assets">0원</div></div><div style="flex:1;padding:12px 14px;background:var(--danger-light);border-radius:12px;"><div style="font-size:12px;color:var(--text-sub);">총 부채</div><div style="font-weight:700;color:var(--danger);margin-top:2px;font-variant-numeric:tabular-nums;" id="home-total-debt">0원</div></div></div>
@@ -382,8 +376,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="tab-btn active" data-budget-sub="history">내역</button>
       <button class="tab-btn" data-budget-sub="assets">자산</button>
       <button class="tab-btn" data-budget-sub="fixed">고정지출</button>
+      <button class="tab-btn" data-budget-sub="paydates">결제일</button>
       <button class="tab-btn" data-budget-sub="stats">통계</button>
-      <button class="tab-btn" data-budget-sub="plan">예산</button>
     </div>
     <div id="budget-sub-history" class="budget-sub active">
       <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="history-search" placeholder="메모/카테고리/자산 검색" oninput="onSearchInput()"></div>
@@ -411,12 +405,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="tab-group" style="padding-top:0;"><button class="tab-btn active" data-stat="month">이번 달</button><button class="tab-btn" data-stat="trend">월별 추이</button></div>
       <div id="stats-content"></div>
     </div>
-    <div id="budget-sub-plan" class="budget-sub">
-      <div class="card" style="margin-top:0;"><div class="card-header"><div class="card-title">이번 달 총 예산</div></div>
-        <div style="display:flex;align-items:center;gap:12px;"><input type="number" class="budget-input" id="total-budget-input" placeholder="0" style="flex:1;width:auto;font-size:18px;" onchange="saveTotalBudget(this.value)"><span style="font-weight:600;font-size:16px;">원</span></div>
-        <div style="font-size:12px;color:var(--text-sub);margin-top:10px;">카테고리 예산의 합과 별개로 전체 한도.</div>
-      </div>
-      <div class="card" style="padding:0;"><div style="padding:18px 20px 10px;"><div class="card-title">카테고리별 예산</div></div><div id="budget-editor"></div></div>
+    <div id="budget-sub-paydates" class="budget-sub">
+      <div id="paydates-content"></div>
+      <div style="padding:4px 20px 20px;"><button class="btn-primary" onclick="openRecurringEditModal()">+ 고정지출 추가</button></div>
     </div>
   </div>
   <!-- TODOS -->
@@ -553,6 +544,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button data-method="카드" onclick="setRecPayMethod('카드')">💳 카드</button>
         <button data-method="현금" onclick="setRecPayMethod('현금')">💵 현금/계좌</button>
       </div>
+    </div>
+    <div id="rec-payname-wrap" style="display:none;" class="form-group">
+      <label class="form-label" id="rec-payname-label">카드명</label>
+      <input type="text" class="form-input" id="rec-payname" placeholder="예: 신한카드, 카카오뱅크" maxlength="30">
     </div>
     <button class="btn-primary" onclick="saveRecurring()">저장</button>
     <button class="btn-danger" id="rec-delete-btn" onclick="deleteRecurring()" style="display:none;">삭제</button>
@@ -1036,10 +1031,31 @@ const getAsset = id => state.assets.find(a => a.id === id);
 function getAssetCurrentBalance(assetId) {
   const a = getAsset(assetId); if (!a) return 0;
   if (a.type === '보험') return Number(a.balance) || 0;
-  if (a.type === '저축') return Number(a.balance) || 0; // 월납×회차
+  if (a.type === '저축') return Number(a.balance) || 0;
   if (a.type === '부동산') {
-    if (a.realestate) return Number(a.realestate.marketValue) || 0; // 카드에 시세 표시
+    if (a.realestate) {
+      // 이체로 대출 상환 반영: 이 자산으로 이체 들어오면 대출 감소
+      let loan = Number(a.realestate.loanAmount) || 0;
+      state.transactions.forEach(t => {
+        if (t.type === 'transfer') {
+          if (t.toAccountId === assetId) loan = Math.max(0, loan - t.amount);
+          if (t.fromAccountId === assetId) loan += t.amount;
+        }
+      });
+      return (Number(a.realestate.marketValue) || 0) - loan;
+    }
     return Number(a.initialBalance) || Number(a.balance) || 0;
+  }
+  if (a.type === '대출·부채') {
+    // 이체로 상환하면 잔액 감소
+    let bal = Number(a.initialBalance) || Number(a.balance) || 0;
+    state.transactions.forEach(t => {
+      if (t.type === 'transfer') {
+        if (t.fromAccountId === assetId) bal = Math.max(0, bal - t.amount); // 상환
+        if (t.toAccountId === assetId) bal += t.amount; // 추가 대출
+      }
+    });
+    return bal;
   }
   const info = getAssetTypeInfo(a.type);
   let bal = Number(a.initialBalance) || 0;
@@ -1191,6 +1207,7 @@ function renderBudgetPage() {
   if (budgetSub === 'history') renderHistory();
   else if (budgetSub === 'assets') renderAssets();
   else if (budgetSub === 'fixed') renderFixedExpenses();
+  else if (budgetSub === 'paydates') renderPayDates();
   else if (budgetSub === 'stats') renderStats();
   else if (budgetSub === 'plan') renderBudget();
 }
@@ -1200,24 +1217,10 @@ function renderHome() {
   const mk = monthKey(currentMonth);
   document.getElementById('home-month-label').textContent = monthLabel(currentMonth);
   const txs = txForMonth(currentMonth);
-  const income = txs.filter(t => t.type === 'income').reduce((s,t) => s+t.amount, 0);
-  const expense = txs.filter(t => t.type === 'expense').reduce((s,t) => s+t.amount, 0);
-  const budget = getMonthlyBudget(mk);
-  const remaining = (budget.total || 0) - expense;
-  document.getElementById('home-income').textContent = fmt(income) + '원';
-  document.getElementById('home-expense').textContent = fmt(expense) + '원';
-  document.getElementById('home-remaining').textContent = fmt(Math.max(0, remaining));
   const nw = calcNetWorth();
   document.getElementById('home-networth').textContent = fmt(nw.netWorth) + '원';
   document.getElementById('home-total-assets').textContent = fmt(nw.totalAssets) + '원';
   document.getElementById('home-total-debt').textContent = fmt(nw.totalDebt) + '원';
-  const alertsEl = document.getElementById('home-alerts');
-  alertsEl.innerHTML = '';
-  if (budget.total > 0) {
-    const pct = (expense / budget.total) * 100;
-    if (pct >= 100) alertsEl.innerHTML = `<div class="alert-banner danger"><span class="alert-emoji">🚨</span><div class="alert-text"><strong>예산 ${fmt(expense-budget.total)}원 초과</strong></div></div>`;
-    else if (pct >= 80) alertsEl.innerHTML = `<div class="alert-banner"><span class="alert-emoji">⚠️</span><div class="alert-text"><strong>예산 ${Math.round(pct)}%</strong> 사용</div></div>`;
-  }
   // 할 일
   const activeTodos = (state.todos || []).filter(t => !t.done).sort((a,b) => {
     if ((b.priority||0) !== (a.priority||0)) return (b.priority||0)-(a.priority||0);
@@ -1384,77 +1387,12 @@ function renderSettings() {
   }
 }
 
-function renderFixedExpenses() {
-  const summaryEl = document.getElementById('fixed-summary');
-  const listEl = document.getElementById('fixed-list');
-  if (!summaryEl || !listEl) return;
-
-  const items = state.recurring || [];
-  const expenses = items.filter(r => r.type === 'expense');
-  const incomes = items.filter(r => r.type === 'income');
-  const activeExp = expenses.filter(r => r.active);
-  const activeInc = incomes.filter(r => r.active);
-  const monthlyExp = activeExp.reduce((s, r) => s + r.amount, 0);
-  const monthlyInc = activeInc.reduce((s, r) => s + r.amount, 0);
-  const monthlyNet = monthlyInc - monthlyExp;
-
-  // 요약 카드
-  summaryEl.innerHTML = `
-    <div style="margin:0 20px 14px;">
-      <div style="background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:22px 20px;color:white;">
-        <div style="font-size:13px;opacity:.8;margin-bottom:6px;">이번 달 고정지출</div>
-        <div style="font-size:28px;font-weight:800;letter-spacing:-0.02em;margin-bottom:16px;font-variant-numeric:tabular-nums;">-${fmt(monthlyExp)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div>
-        <div style="display:flex;gap:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.15);">
-          <div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">연간 합계</div><div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;">-${fmt(monthlyExp * 12)}원</div></div>
-          <div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">고정수입</div><div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#4ADE80;">+${fmt(monthlyInc)}원</div></div>
-          <div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">실 순지출</div><div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:${monthlyNet >= 0 ? '#4ADE80' : '#F87171'};">${monthlyNet >= 0 ? '+' : ''}${fmt(monthlyNet)}원</div></div>
-        </div>
-      </div>
-    </div>`;
-
-  if (items.length === 0) {
-    listEl.innerHTML = `<div class="empty"><span class="empty-emoji">🔁</span><div class="empty-title">고정지출이 없어요</div><div class="empty-desc">아래 버튼으로 추가해보세요</div></div>`;
-    return;
-  }
-
-  // 결제방법별 그룹
-  const cardExp = expenses.filter(r => r.payMethod === '카드');
-  const cashExp = expenses.filter(r => r.payMethod === '현금');
-  const etcExp  = expenses.filter(r => !r.payMethod);
-
-  function renderGroup(list, label, emoji) {
-    if (list.length === 0) return '';
-    const total = list.reduce((s,r) => s + r.amount, 0);
-    const activeTotal = list.filter(r => r.active).reduce((s,r) => s + r.amount, 0);
-    return `<div style="padding:4px 20px 8px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:12px;color:var(--text-sub);font-weight:600;">${emoji} ${label} · ${list.length}건</span>
-      <span style="font-size:13px;font-weight:700;color:var(--text);">월 ${fmt(activeTotal)}원</span>
-    </div>
-    <div class="tx-list" style="margin:0 20px 14px;">${list.map(r => renderFixedItem(r)).join('')}</div>`;
-  }
-
-  let html = '';
-  if (cardExp.length > 0) html += renderGroup(cardExp, '카드 결제', '💳');
-  if (cashExp.length > 0) html += renderGroup(cashExp, '현금/계좌 결제', '💵');
-  if (etcExp.length > 0)  html += renderGroup(etcExp, '미분류', '📋');
-
-  if (incomes.length > 0) {
-    const activeInc = incomes.filter(r => r.active).reduce((s,r) => s+r.amount, 0);
-    html += `<div style="padding:4px 20px 8px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:12px;color:var(--text-sub);font-weight:600;">📥 고정수입 · ${incomes.length}건</span>
-      <span style="font-size:13px;font-weight:700;color:var(--primary);">월 +${fmt(activeInc)}원</span>
-    </div>
-    <div class="tx-list" style="margin:0 20px 14px;">${incomes.map(r => renderFixedItem(r)).join('')}</div>`;
-  }
-  listEl.innerHTML = html;
-}
-
 function renderFixedItem(r) {
   const info = getCategoryInfo(r.type, r.category);
   const sign = r.type === 'income' ? '+' : '-';
   const amtCls = r.type === 'income' ? 'income' : 'expense';
-  const acc = r.accountId ? getAsset(r.accountId) : null;
-  const sub = [r.category, `매달 ${r.dayOfMonth}일`, acc ? acc.name : ''].filter(Boolean).join(' · ');
+  const payLabel = r.payName ? r.payName : (r.accountId ? (getAsset(r.accountId)||{}).name||'' : '');
+  const sub = [r.category, `매달 ${r.dayOfMonth}일`, payLabel].filter(Boolean).join(' · ');
   const dimStyle = r.active ? '' : 'opacity:.4;';
   return `<div class="tx-item" style="${dimStyle}" onclick="openRecurringEditModal('${r.id}')">
     <div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div>
@@ -1465,6 +1403,69 @@ function renderFixedItem(r) {
     </div>
   </div>`;
 }
+
+function renderFixedExpenses() {
+  const summaryEl = document.getElementById('fixed-summary');
+  const listEl = document.getElementById('fixed-list');
+  if (!summaryEl || !listEl) return;
+  const items = state.recurring || [];
+  const expenses = items.filter(r => r.type === 'expense');
+  const incomes = items.filter(r => r.type === 'income');
+  const activeExp = expenses.filter(r => r.active).reduce((s,r) => s+r.amount, 0);
+  const activeInc = incomes.filter(r => r.active).reduce((s,r) => s+r.amount, 0);
+  const monthlyNet = activeInc - activeExp;
+  summaryEl.innerHTML = `<div style="margin:0 20px 14px;"><div style="background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:22px 20px;color:white;"><div style="font-size:13px;opacity:.8;margin-bottom:6px;">이번 달 고정지출</div><div style="font-size:28px;font-weight:800;margin-bottom:16px;font-variant-numeric:tabular-nums;">-${fmt(activeExp)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div><div style="display:flex;gap:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.15);"><div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">연간</div><div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;">-${fmt(activeExp*12)}원</div></div><div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">고정수입</div><div style="font-size:15px;font-weight:700;color:#4ADE80;">+${fmt(activeInc)}원</div></div><div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">실 순지출</div><div style="font-size:15px;font-weight:700;color:${monthlyNet>=0?'#4ADE80':'#F87171'};">${monthlyNet>=0?'+':''}${fmt(monthlyNet)}원</div></div></div></div></div>`;
+  if (items.length === 0) { listEl.innerHTML = `<div class="empty"><span class="empty-emoji">🔁</span><div class="empty-title">고정지출이 없어요</div></div>`; return; }
+  // 카드/계좌별 소계
+  const cardMap = {}, cashMap = {};
+  expenses.filter(r => r.active && r.payMethod).forEach(r => {
+    const key = r.payName || (r.payMethod === '카드' ? '미지정 카드' : '미지정 계좌');
+    if (r.payMethod === '카드') cardMap[key] = (cardMap[key]||0) + r.amount;
+    else if (r.payMethod === '현금') cashMap[key] = (cashMap[key]||0) + r.amount;
+  });
+  const cardKeys = Object.keys(cardMap), cashKeys = Object.keys(cashMap);
+  let accountSummary = '';
+  if (cardKeys.length > 0 || cashKeys.length > 0) {
+    accountSummary = `<div style="margin:0 20px 14px;background:var(--card);border-radius:16px;overflow:hidden;border:1px solid var(--border-line);"><div style="padding:12px 16px;background:var(--bg);font-size:13px;font-weight:700;">💳 카드/계좌별 월 고정지출</div>`;
+    cardKeys.forEach(k => { accountSummary += `<div class="tx-item" style="cursor:default;"><div style="font-size:20px;">💳</div><div class="tx-info"><div class="tx-category">${k}</div></div><div class="tx-amount expense">-${fmt(cardMap[k])}원</div></div>`; });
+    cashKeys.forEach(k => { accountSummary += `<div class="tx-item" style="cursor:default;"><div style="font-size:20px;">🏦</div><div class="tx-info"><div class="tx-category">${k}</div></div><div class="tx-amount expense">-${fmt(cashMap[k])}원</div></div>`; });
+    accountSummary += `</div>`;
+  }
+  const cardExp = expenses.filter(r => r.payMethod === '카드');
+  const cashExp = expenses.filter(r => r.payMethod === '현금');
+  const etcExp = expenses.filter(r => !r.payMethod);
+  const rg = (list, label, emoji) => {
+    if (!list.length) return '';
+    const t = list.filter(r=>r.active).reduce((s,r)=>s+r.amount,0);
+    return `<div style="padding:4px 20px 8px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--text-sub);font-weight:600;">${emoji} ${label} · ${list.length}건</span><span style="font-size:13px;font-weight:700;">월 ${fmt(t)}원</span></div><div class="tx-list" style="margin:0 20px 14px;">${list.map(r=>renderFixedItem(r)).join('')}</div>`;
+  };
+  let html = accountSummary + rg(cardExp,'카드 결제','💳') + rg(cashExp,'현금/계좌 결제','💵') + rg(etcExp,'미분류','📋');
+  if (incomes.length>0) { const t=incomes.filter(r=>r.active).reduce((s,r)=>s+r.amount,0); html+=`<div style="padding:4px 20px 8px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--text-sub);font-weight:600;">📥 고정수입 · ${incomes.length}건</span><span style="font-size:13px;font-weight:700;color:var(--primary);">월 +${fmt(t)}원</span></div><div class="tx-list" style="margin:0 20px 14px;">${incomes.map(r=>renderFixedItem(r)).join('')}</div>`; }
+  listEl.innerHTML = html;
+}
+
+function renderPayDates() {
+  const el = document.getElementById('paydates-content');
+  if (!el) return;
+  const items = (state.recurring||[]).filter(r => r.type === 'expense' && r.active);
+  if (items.length === 0) { el.innerHTML = `<div class="empty"><span class="empty-emoji">📅</span><div class="empty-title">고정지출을 추가하면 여기에 표시돼요</div></div>`; return; }
+  const byDay = {};
+  items.forEach(r => { const d = r.dayOfMonth||1; (byDay[d]=byDay[d]||[]).push(r); });
+  const days = Object.keys(byDay).map(Number).sort((a,b)=>a-b);
+  const td = new Date().getDate();
+  let html = `<div style="padding:4px 20px 8px;font-size:12px;color:var(--text-sub);font-weight:600;">매월 결제일 현황 · 총 ${items.length}건</div>`;
+  days.forEach(day => {
+    const list = byDay[day];
+    const dayTotal = list.reduce((s,r)=>s+r.amount,0);
+    const isToday = day===td, isPast = day<td;
+    const ds = isToday?'background:var(--primary);color:white;':isPast?'background:var(--border);color:var(--text-sub);':'background:var(--primary-light);color:var(--primary);';
+    html += `<div style="margin:0 20px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--border-line);"><div style="padding:12px 16px;display:flex;align-items:center;gap:12px;background:var(--bg);"><div style="${ds}width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">${day}</div><div style="flex:1;"><div style="font-size:15px;font-weight:700;">${day}일 결제</div><div style="font-size:12px;color:var(--text-sub);">${list.length}건</div></div><div style="font-weight:700;font-size:15px;color:var(--danger);">-${fmt(dayTotal)}원</div></div><div style="background:var(--card);">${list.map(r=>{const info=getCategoryInfo(r.type,r.category);const pl=r.payName?r.payName:r.payMethod==='카드'?'💳':r.payMethod==='현금'?'🏦':'';const sub=[pl,r.category].filter(Boolean).join(' · ');return `<div class="tx-item" onclick="openRecurringEditModal('${r.id}')"><div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div><div class="tx-info"><div class="tx-category">${r.name}</div><div class="tx-memo">${sub}</div></div><div class="tx-amount expense">-${fmt(r.amount)}원</div></div>`;}).join('')}</div></div>`;
+  });
+  const total = items.reduce((s,r)=>s+r.amount,0);
+  html += `<div style="margin:0 20px 8px;padding:14px 16px;background:var(--card);border-radius:14px;display:flex;justify-content:space-between;"><span style="font-weight:600;">이번 달 합계</span><span style="font-weight:800;font-size:16px;color:var(--danger);">-${fmt(total)}원</span></div>`;
+  el.innerHTML = html;
+}
+
 
 function saveTotalBudget(v) {
   const mk = monthKey(currentMonth);
@@ -1693,7 +1694,7 @@ function openRecurringEditModal(id) {
   if (id) {
     const r = state.recurring.find(x => x.id === id);
     if (!r) return;
-    recModal = {editingId:id, type:r.type, category:r.category, payMethod: r.payMethod || ''};
+    recModal = {editingId:id, type:r.type, category:r.category, payMethod: r.payMethod || '', payName: r.payName || ''};
     document.getElementById('rec-name').value = r.name;
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.dayOfMonth;
@@ -1702,12 +1703,14 @@ function openRecurringEditModal(id) {
     document.getElementById('rec-delete-btn').style.display = 'block';
     setRecType(r.type);
     setRecPayMethod(r.payMethod || '');
+    document.getElementById('rec-payname').value = r.payName || '';
   } else {
-    recModal = {editingId:null, type:'expense', category:null, payMethod:''};
+    recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:''};
     document.getElementById('rec-name').value = '';
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = 1;
     document.getElementById('rec-account').value = '';
+    document.getElementById('rec-payname').value = '';
     document.getElementById('recurring-edit-title').textContent = '반복 추가';
     document.getElementById('rec-delete-btn').style.display = 'none';
     setRecType('expense');
@@ -1719,6 +1722,11 @@ function closeRecurringEditModal() { document.getElementById('recurring-edit-mod
 function setRecPayMethod(m) {
   recModal.payMethod = m;
   document.querySelectorAll('#rec-paymethod-seg button').forEach(b => b.classList.toggle('active', b.dataset.method === m));
+  const wrap = document.getElementById('rec-payname-wrap');
+  const label = document.getElementById('rec-payname-label');
+  if (m === '카드') { wrap.style.display = 'block'; label.textContent = '카드명'; }
+  else if (m === '현금') { wrap.style.display = 'block'; label.textContent = '계좌명'; }
+  else { wrap.style.display = 'none'; }
 }
 function setRecType(t) {
   recModal.type = t;
@@ -1741,8 +1749,9 @@ function saveRecurring() {
   if (!name) { alert('이름 입력'); return; }
   if (!amount) { alert('금액 입력'); return; }
   if (!recModal.category) { alert('카테고리 선택'); return; }
-  if (recModal.editingId) { const r = state.recurring.find(x => x.id === recModal.editingId); if (r) Object.assign(r, {type:recModal.type, name, amount, category:recModal.category, dayOfMonth:day, accountId, payMethod:recModal.payMethod}); }
-  else state.recurring.push({id:'rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), type:recModal.type, name, amount, category:recModal.category, accountId, dayOfMonth:day, payMethod:recModal.payMethod, active:true, createdAt:today()});
+  const payName = document.getElementById('rec-payname').value.trim();
+  if (recModal.editingId) { const r = state.recurring.find(x => x.id === recModal.editingId); if (r) Object.assign(r, {type:recModal.type, name, amount, category:recModal.category, dayOfMonth:day, accountId, payMethod:recModal.payMethod, payName}); }
+  else state.recurring.push({id:'rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), type:recModal.type, name, amount, category:recModal.category, accountId, dayOfMonth:day, payMethod:recModal.payMethod, payName, active:true, createdAt:today()});
   save(); generateRecurring(); closeRecurringEditModal(); renderRecurringList(); render();
 }
 function deleteRecurring() {
