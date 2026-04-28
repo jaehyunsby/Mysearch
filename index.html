@@ -526,6 +526,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="menu-item" onclick="openRecurringModal()"><div><div style="font-weight:500;">고정비 · 반복 지출</div><div class="value-text" id="recurring-count-label">0개</div></div><span class="arrow">›</span></button>
     </div>
     <div class="menu-list">
+      <button class="menu-item" onclick="openCategoryManageModal()"><div style="font-weight:500;">📂 카테고리 관리</div><span class="arrow">›</span></button>
+      <button class="menu-item" onclick="openFolderManageModal()"><div style="font-weight:500;">🗂 폴더 관리</div><span class="arrow">›</span></button>
+    </div>
+    <div class="menu-list">
       <button class="menu-item" onclick="openMonthStartModal()"><div style="font-weight:500;">월 기준일</div><div style="display:flex;align-items:center;gap:6px;"><span class="value-text" id="month-start-label">매월 1일</span><span class="arrow">›</span></div></button>
       <button class="menu-item" onclick="openPinSetupModal()"><div style="font-weight:500;">PIN 잠금</div><div style="display:flex;align-items:center;gap:6px;"><span class="value-text" id="pin-status-label">꺼짐</span><span class="arrow">›</span></div></button>
     </div>
@@ -862,6 +866,41 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div></div>
 
+<!-- CATEGORY MANAGE MODAL -->
+<div class="modal-backdrop" id="category-manage-modal" onclick="if(event.target===this)closeCategoryManageModal()"><div class="modal" style="max-height:96vh;"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title">카테고리 관리</div><button class="modal-close" onclick="closeCategoryManageModal()">×</button></div>
+  <div class="modal-body" style="padding:0 0 24px;">
+    <div class="tab-group"><button class="tab-btn active" data-catmg="expense" onclick="setCatManageType('expense')">지출</button><button class="tab-btn" data-catmg="income" onclick="setCatManageType('income')">수입</button></div>
+    <div id="category-manage-list"></div>
+    <div style="padding:12px 20px;"><button class="btn-primary" onclick="openAddCategoryModal()">+ 카테고리 추가</button></div>
+  </div>
+</div></div>
+
+<!-- ADD/EDIT CATEGORY MODAL -->
+<div class="modal-backdrop" id="add-category-modal" onclick="if(event.target===this)closeAddCategoryModal()"><div class="modal"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title" id="add-cat-title">카테고리 추가</div><button class="modal-close" onclick="closeAddCategoryModal()">×</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label class="form-label">이모지</label>
+      <input type="text" class="form-input" id="add-cat-emoji" placeholder="😀" maxlength="2" style="font-size:28px;text-align:center;width:80px;">
+    </div>
+    <div class="form-group"><label class="form-label">카테고리 이름</label>
+      <input type="text" class="form-input" id="add-cat-name" placeholder="예: 교통비" maxlength="10">
+    </div>
+    <button class="btn-primary" onclick="saveCategory()">저장</button>
+    <button class="btn-danger" id="add-cat-delete-btn" onclick="deleteCategory()" style="display:none;">삭제</button>
+  </div>
+</div></div>
+
+<!-- FOLDER MANAGE MODAL -->
+<div class="modal-backdrop" id="folder-manage-modal" onclick="if(event.target===this)closeFolderManageModal()"><div class="modal" style="max-height:96vh;"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title">폴더 관리</div><button class="modal-close" onclick="closeFolderManageModal()">×</button></div>
+  <div class="modal-body" style="padding:0 0 24px;">
+    <div class="tab-group"><button class="tab-btn active" data-fldmg="notes" onclick="setFolderManageType('notes')">📝 메모</button><button class="tab-btn" data-fldmg="bookmarks" onclick="setFolderManageType('bookmarks')">🔖 북마크</button></div>
+    <div id="folder-manage-list"></div>
+    <div style="padding:12px 20px;"><button class="btn-primary" onclick="addFolderFromManage()">+ 폴더 추가</button></div>
+  </div>
+</div></div>
+
 <script>
 // ========== SUPABASE ==========
 const SUPABASE_URL = 'https://nshsxlocrolzoozuotmz.supabase.co';
@@ -897,7 +936,8 @@ const defaultData = {
   transactions:[], budgets:{}, recurring:[], recurringGenerated:{}, assets:[], templates:[],
   todos:[], notes:[], folders:[], bookmarks:[], bookmarkFolders:[], goals:[], recurringTodoGenerated:{},
   ceremonials:[], subscriptions:[],
-  settings:{monthStartDay:1, pin:null}, version:10
+  customCategories:{expense:[], income:[]},
+  settings:{monthStartDay:1, pin:null}, version:11
 };
 
 // ========== STATE ==========
@@ -915,6 +955,9 @@ let goalModal = {editingId:null, category:null, done:false, progressType:'slider
 let ceremonialModal = {editingId:null, type:'expense', category:null};
 let subscriptionModal = {editingId:null, cycle:'monthly', category:null};
 let cerFilter = 'all'; let subFilter = 'all'; let evSub = 'ceremonial';
+let catManageType = 'expense';
+let catEditKey = null; // 수정 중인 카테고리 key
+let folderManageType = 'notes';
 let historyFilter = 'all'; let historySearch = ''; let statsTab = 'month';
 let todoFilter = 'active'; let todoSearch = '';
 let noteSearch = ''; let noteFolder = 'all'; let noteTagFilter = null;
@@ -974,6 +1017,7 @@ function migrate(d) {
   }
   if (d.version < 9) { d.recurringTodoGenerated = d.recurringTodoGenerated || {}; d.version = 9; }
   if (d.version < 10) { d.ceremonials = d.ceremonials || []; d.subscriptions = d.subscriptions || []; d.version = 10; }
+  if (d.version < 11) { d.customCategories = d.customCategories || {expense:[], income:[]}; d.version = 11; }
   return d;
 }
 function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -1148,7 +1192,12 @@ function monthRangeFor(dateObj) {
   return {start, end};
 }
 function txForMonth(dateObj) { const {start,end} = monthRangeFor(dateObj); const s=toIso(start),e=toIso(end); return state.transactions.filter(t => t.date >= s && t.date <= e); }
-const getCategoryInfo = (type, key) => (CATEGORIES[type]||[]).find(c => c.key === key) || {key, emoji:'❓', color:'#95A5A6'};
+const getCategoryInfo = (type, key) => getCategories(type).find(c => c.key === key) || {key, emoji:'❓', color:'#95A5A6'};
+function getCategories(type) {
+  const base = CATEGORIES[type] || [];
+  const custom = (state.customCategories && state.customCategories[type]) || [];
+  return [...base, ...custom];
+}
 const getAssetTypeInfo = key => ASSET_TYPES.find(t => t.key === key) || ASSET_TYPES[0];
 const getAsset = id => state.assets.find(a => a.id === id);
 
@@ -1655,7 +1704,7 @@ function setTxType(type, keep) {
   document.getElementById('tx-subcategory-wrap').style.display = isT ? 'none' : 'block';
   document.getElementById('tx-account-wrap').style.display = isT ? 'none' : 'block';
   document.getElementById('tx-transfer-wrap').style.display = isT ? 'block' : 'none';
-  if (!keep && !isT && txModal.category && !CATEGORIES[type].find(c => c.key === txModal.category)) txModal.category = null;
+  if (!keep && !isT && txModal.category && !getCategories(type).find(c => c.key === txModal.category)) txModal.category = null;
   if (!isT) renderTxCategories();
   renderAccountSelects();
   document.getElementById('tx-account-label').textContent = type === 'income' ? '입금 자산 (선택)' : '결제 자산 (선택)';
@@ -1664,7 +1713,7 @@ function setTxType(type, keep) {
 }
 function renderTxCategories() {
   if (txModal.type === 'transfer') return;
-  document.getElementById('tx-category-grid').innerHTML = CATEGORIES[txModal.type].map(c =>
+  document.getElementById('tx-category-grid').innerHTML = getCategories(txModal.type).map(c =>
     `<button class="category-btn ${txModal.category===c.key?'active':''}" onclick="selectTxCat('${c.key}')"><span class="emoji">${c.emoji}</span><span>${c.key}</span></button>`
   ).join('');
 }
@@ -3450,6 +3499,183 @@ function deleteSubscription() {
   if (!confirm('삭제할까요?')) return;
   state.subscriptions = state.subscriptions.filter(s=>s.id!==subscriptionModal.editingId);
   save(); closeSubscriptionModal(); renderSubscriptions();
+}
+
+// ========== CATEGORY MANAGE ==========
+function openCategoryManageModal() {
+  catManageType = 'expense';
+  document.querySelectorAll('[data-catmg]').forEach(b => b.classList.toggle('active', b.dataset.catmg === 'expense'));
+  renderCategoryManageList();
+  document.getElementById('category-manage-modal').classList.add('active');
+}
+function closeCategoryManageModal() { document.getElementById('category-manage-modal').classList.remove('active'); }
+function setCatManageType(t) {
+  catManageType = t;
+  document.querySelectorAll('[data-catmg]').forEach(b => b.classList.toggle('active', b.dataset.catmg === t));
+  renderCategoryManageList();
+}
+function renderCategoryManageList() {
+  const el = document.getElementById('category-manage-list');
+  const base = CATEGORIES[catManageType] || [];
+  const custom = (state.customCategories && state.customCategories[catManageType]) || [];
+  let html = '';
+  if (base.length > 0) {
+    html += `<div style="padding:8px 20px 4px;font-size:12px;color:var(--text-sub);font-weight:600;">기본 카테고리</div>`;
+    html += `<div class="tx-list" style="margin:0 20px 12px;">` + base.map(c =>
+      `<div class="tx-item" onclick="openEditCategoryModal('${c.key}', 'base')">
+        <div style="font-size:24px;width:40px;text-align:center;">${c.emoji}</div>
+        <div class="tx-info"><div class="tx-category">${c.key}</div></div>
+        <span style="color:var(--text-placeholder);font-size:18px;">›</span>
+      </div>`
+    ).join('') + `</div>`;
+  }
+  if (custom.length > 0) {
+    html += `<div style="padding:8px 20px 4px;font-size:12px;color:var(--text-sub);font-weight:600;">커스텀 카테고리</div>`;
+    html += `<div class="tx-list" style="margin:0 20px 12px;">` + custom.map(c =>
+      `<div class="tx-item" onclick="openEditCategoryModal('${c.key}', 'custom')">
+        <div style="font-size:24px;width:40px;text-align:center;">${c.emoji}</div>
+        <div class="tx-info"><div class="tx-category">${c.key}</div></div>
+        <span style="color:var(--text-placeholder);font-size:18px;">›</span>
+      </div>`
+    ).join('') + `</div>`;
+  }
+  el.innerHTML = html || `<div class="empty" style="padding:30px;"><div class="empty-desc">카테고리가 없어요</div></div>`;
+}
+function openAddCategoryModal() {
+  catEditKey = null;
+  document.getElementById('add-cat-title').textContent = '카테고리 추가';
+  document.getElementById('add-cat-emoji').value = '';
+  document.getElementById('add-cat-name').value = '';
+  document.getElementById('add-cat-delete-btn').style.display = 'none';
+  document.getElementById('add-category-modal').classList.add('active');
+}
+function openEditCategoryModal(key, kind) {
+  const cats = kind === 'base' ? CATEGORIES[catManageType] : (state.customCategories[catManageType] || []);
+  const cat = cats.find(c => c.key === key);
+  if (!cat) return;
+  catEditKey = kind === 'custom' ? key : null; // 기본 카테고리는 삭제 불가
+  document.getElementById('add-cat-title').textContent = '카테고리 수정';
+  document.getElementById('add-cat-emoji').value = cat.emoji;
+  document.getElementById('add-cat-name').value = cat.key;
+  document.getElementById('add-cat-delete-btn').style.display = kind === 'custom' ? 'block' : 'none';
+  document.getElementById('add-category-modal').classList.add('active');
+}
+function closeAddCategoryModal() { document.getElementById('add-category-modal').classList.remove('active'); }
+function saveCategory() {
+  const emoji = document.getElementById('add-cat-emoji').value.trim() || '📦';
+  const name = document.getElementById('add-cat-name').value.trim();
+  if (!name) { alert('이름을 입력하세요'); return; }
+  state.customCategories = state.customCategories || {expense:[], income:[]};
+  state.customCategories[catManageType] = state.customCategories[catManageType] || [];
+  if (catEditKey) {
+    // 커스텀 카테고리 수정
+    const idx = state.customCategories[catManageType].findIndex(c => c.key === catEditKey);
+    if (idx !== -1) {
+      // 기존 거래 내역의 카테고리도 업데이트
+      if (catEditKey !== name) {
+        state.transactions.forEach(t => { if (t.category === catEditKey && t.type === catManageType) t.category = name; });
+      }
+      state.customCategories[catManageType][idx] = {key:name, emoji, color:'#95A5A6'};
+    }
+  } else {
+    // 새 커스텀 카테고리 추가 (중복 확인)
+    const allCats = getCategories(catManageType);
+    if (allCats.find(c => c.key === name)) { alert('이미 있는 카테고리예요'); return; }
+    state.customCategories[catManageType].push({key:name, emoji, color:'#95A5A6'});
+  }
+  save(); closeAddCategoryModal(); renderCategoryManageList(); render();
+}
+function deleteCategory() {
+  if (!catEditKey) return;
+  if (!confirm(`"${catEditKey}" 카테고리를 삭제할까요?\n해당 카테고리의 거래 내역은 "기타"로 변경됩니다.`)) return;
+  state.transactions.forEach(t => { if (t.category === catEditKey) t.category = '기타'; });
+  state.customCategories[catManageType] = state.customCategories[catManageType].filter(c => c.key !== catEditKey);
+  save(); closeAddCategoryModal(); renderCategoryManageList(); render();
+}
+
+// ========== FOLDER MANAGE ==========
+function openFolderManageModal() {
+  folderManageType = 'notes';
+  document.querySelectorAll('[data-fldmg]').forEach(b => b.classList.toggle('active', b.dataset.fldmg === 'notes'));
+  renderFolderManageList();
+  document.getElementById('folder-manage-modal').classList.add('active');
+}
+function closeFolderManageModal() { document.getElementById('folder-manage-modal').classList.remove('active'); }
+function setFolderManageType(t) {
+  folderManageType = t;
+  document.querySelectorAll('[data-fldmg]').forEach(b => b.classList.toggle('active', b.dataset.fldmg === t));
+  renderFolderManageList();
+}
+function getFolderList() {
+  if (folderManageType === 'notes') {
+    const s = new Set([...(state.folders||[])]);
+    (state.notes||[]).forEach(n => { if (n.folder) s.add(n.folder); });
+    return [...s];
+  } else {
+    const s = new Set([...(state.bookmarkFolders||[])]);
+    (state.bookmarks||[]).forEach(b => { if (b.folder) s.add(b.folder); });
+    return [...s];
+  }
+}
+function renderFolderManageList() {
+  const el = document.getElementById('folder-manage-list');
+  const folders = getFolderList();
+  if (folders.length === 0) { el.innerHTML = `<div class="empty" style="padding:30px;"><div class="empty-desc">폴더가 없어요</div></div>`; return; }
+  el.innerHTML = `<div class="tx-list" style="margin:12px 20px;">` + folders.map(f => {
+    const count = folderManageType === 'notes'
+      ? (state.notes||[]).filter(n => n.folder === f).length
+      : (state.bookmarks||[]).filter(b => b.folder === f).length;
+    return `<div class="tx-item">
+      <div class="tx-info"><div class="tx-category">📁 ${escapeHtml(f)}</div><div class="tx-memo">${count}개</div></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="renameFolderPrompt('${escapeHtml(f).replace(/'/g,"\\'")}')" style="background:var(--primary-light);color:var(--primary);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;">수정</button>
+        <button onclick="deleteFolderConfirm('${escapeHtml(f).replace(/'/g,"\\'")}')" style="background:var(--danger-light);color:var(--danger);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;">삭제</button>
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+function addFolderFromManage() {
+  const name = prompt('새 폴더 이름');
+  if (!name || !name.trim()) return;
+  const n = name.trim();
+  if (folderManageType === 'notes') {
+    state.folders = state.folders || [];
+    if (!state.folders.includes(n)) state.folders.push(n);
+  } else {
+    state.bookmarkFolders = state.bookmarkFolders || [];
+    if (!state.bookmarkFolders.includes(n)) state.bookmarkFolders.push(n);
+  }
+  save(); renderFolderManageList();
+}
+function renameFolderPrompt(oldName) {
+  const newName = prompt('새 이름', oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+  const n = newName.trim();
+  if (folderManageType === 'notes') {
+    (state.notes||[]).forEach(item => { if (item.folder === oldName) item.folder = n; });
+    state.folders = (state.folders||[]).map(f => f === oldName ? n : f);
+  } else {
+    (state.bookmarks||[]).forEach(item => { if (item.folder === oldName) item.folder = n; });
+    state.bookmarkFolders = (state.bookmarkFolders||[]).map(f => f === oldName ? n : f);
+  }
+  save(); renderFolderManageList(); render();
+}
+function deleteFolderConfirm(name) {
+  const count = folderManageType === 'notes'
+    ? (state.notes||[]).filter(n => n.folder === name).length
+    : (state.bookmarks||[]).filter(b => b.folder === name).length;
+  const msg = count > 0
+    ? `"${name}" 폴더를 삭제할까요?\n${count}개 항목의 폴더 지정이 해제됩니다.`
+    : `"${name}" 폴더를 삭제할까요?`;
+  if (!confirm(msg)) return;
+  if (folderManageType === 'notes') {
+    (state.notes||[]).forEach(item => { if (item.folder === name) item.folder = ''; });
+    state.folders = (state.folders||[]).filter(f => f !== name);
+  } else {
+    (state.bookmarks||[]).forEach(item => { if (item.folder === name) item.folder = ''; });
+    state.bookmarkFolders = (state.bookmarkFolders||[]).filter(f => f !== name);
+  }
+  save(); renderFolderManageList(); render();
 }
 
 // ========== EXPORT ==========
