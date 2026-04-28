@@ -312,6 +312,28 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .goal-subitem-label{flex:1;font-size:14px;}
 .goal-subitem-label.done{text-decoration:line-through;color:var(--text-sub);}
 .goal-sub-card{background:var(--bg);border-radius:12px;padding:10px 14px;margin-top:6px;}
+.cer-card{background:var(--card);margin:0 20px 8px;padding:14px 16px;border-radius:14px;border-left:4px solid transparent;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .1s;}
+.cer-card:active{transform:scale(.98);}
+.cer-card.expense{border-left-color:var(--danger);}
+.cer-card.income{border-left-color:var(--primary);}
+.cer-info{flex:1;min-width:0;}
+.cer-title{font-size:15px;font-weight:600;}
+.cer-sub{font-size:12px;color:var(--text-sub);margin-top:2px;}
+.cer-amount{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;}
+.sub-card{background:var(--card);margin:0 20px 8px;padding:14px 16px;border-radius:14px;display:flex;align-items:center;gap:12px;cursor:pointer;}
+.sub-card:active{transform:scale(.98);}
+.sub-icon{width:42px;height:42px;border-radius:14px;background:var(--primary-light);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.sub-info{flex:1;min-width:0;}
+.sub-name{font-size:15px;font-weight:600;}
+.sub-meta{font-size:12px;color:var(--text-sub);margin-top:2px;}
+.sub-amount{text-align:right;}
+.sub-price{font-weight:700;font-size:15px;color:var(--danger);font-variant-numeric:tabular-nums;}
+.sub-cycle{font-size:11px;color:var(--text-sub);margin-top:2px;}
+.sub-warning{font-size:11px;font-weight:700;color:var(--danger);margin-top:2px;}
+.ev-summary{margin:0 20px 12px;padding:14px 16px;background:var(--card);border-radius:14px;display:flex;gap:12px;}
+.ev-sum-item{flex:1;text-align:center;}
+.ev-sum-label{font-size:11px;color:var(--text-sub);}
+.ev-sum-value{font-size:18px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;}
 .stepper-row{display:flex;align-items:center;gap:8px;}
 .stepper-btn{width:44px;height:44px;border-radius:12px;background:var(--bg);border:1.5px solid var(--border-line);font-size:22px;font-weight:400;color:var(--text);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .1s;}
 .stepper-btn:active{background:var(--border-line);}
@@ -426,6 +448,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="tab-btn" data-rec-sub="notes">📝 메모</button>
         <button class="tab-btn" data-rec-sub="bookmarks">🔖 북마크</button>
         <button class="tab-btn" data-rec-sub="goals">🎯 버킷리스트</button>
+        <button class="tab-btn" data-rec-sub="events">🎊 경조사·구독</button>
       </div>
     </header>
     <!-- 할일 -->
@@ -454,6 +477,31 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="rec-sub" id="rec-sub-goals">
       <div class="tab-group"><button class="tab-btn active" data-goal-filter="active">진행 중</button><button class="tab-btn" data-goal-filter="done">달성 🎉</button><button class="tab-btn" data-goal-filter="all">전체</button></div>
       <div id="goals-list"></div>
+    </div>
+    <!-- 경조사·구독 -->
+    <div class="rec-sub" id="rec-sub-events">
+      <div class="tab-group">
+        <button class="tab-btn active" data-ev-sub="ceremonial">🎊 경조사</button>
+        <button class="tab-btn" data-ev-sub="subscriptions">📱 구독</button>
+      </div>
+      <!-- 경조사 -->
+      <div id="ev-sub-ceremonial">
+        <div style="display:flex;gap:6px;padding:0 20px 12px;">
+          <button class="tab-btn active" data-cer-filter="all" style="font-size:12px;padding:6px 12px;">전체</button>
+          <button class="tab-btn" data-cer-filter="expense" style="font-size:12px;padding:6px 12px;">지출</button>
+          <button class="tab-btn" data-cer-filter="income" style="font-size:12px;padding:6px 12px;">수입</button>
+        </div>
+        <div id="ceremonial-list"></div>
+      </div>
+      <!-- 구독 -->
+      <div id="ev-sub-subscriptions" style="display:none;">
+        <div style="display:flex;gap:6px;padding:0 20px 12px;">
+          <button class="tab-btn active" data-sub-filter="all" style="font-size:12px;padding:6px 12px;">전체</button>
+          <button class="tab-btn" data-sub-filter="monthly" style="font-size:12px;padding:6px 12px;">월 구독</button>
+          <button class="tab-btn" data-sub-filter="yearly" style="font-size:12px;padding:6px 12px;">연 구독</button>
+        </div>
+        <div id="subscriptions-list"></div>
+      </div>
     </div>
   </div>
   <!-- MORE (설정만) -->
@@ -774,6 +822,46 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div></div>
 
+<!-- CEREMONIAL MODAL -->
+<div class="modal-backdrop" id="ceremonial-modal" onclick="if(event.target===this)closeCeremonialModal()"><div class="modal"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title" id="ceremonial-modal-title">새 경조사</div><button class="modal-close" onclick="closeCeremonialModal()">×</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label class="form-label">수입/지출</label>
+      <div class="type-toggle"><button id="cer-type-expense" class="active" onclick="setCerType('expense')">지출</button><button id="cer-type-income" onclick="setCerType('income')">수입</button></div>
+    </div>
+    <div class="form-group"><label class="form-label">날짜</label><input type="date" class="form-input" id="cer-date"></div>
+    <div class="form-group"><label class="form-label">이름</label><input type="text" class="form-input" id="cer-name" placeholder="예: 김철수" maxlength="20"></div>
+    <div class="form-group"><label class="form-label">행사 종류</label><div class="category-grid" id="cer-category-grid"></div></div>
+    <div class="form-group"><label class="form-label">금액</label><input type="number" class="form-input" id="cer-amount" placeholder="0" style="text-align:right;font-size:20px;font-weight:700;"></div>
+    <div class="form-group"><label class="form-label">메모 (선택)</label><input type="text" class="form-input" id="cer-memo" placeholder="장소, 관계 등" maxlength="50"></div>
+    <button class="btn-primary" onclick="saveCeremonial()">저장</button>
+    <button class="btn-danger" id="cer-delete-btn" onclick="deleteCeremonial()" style="display:none;">삭제</button>
+  </div>
+</div></div>
+
+<!-- SUBSCRIPTION MODAL -->
+<div class="modal-backdrop" id="subscription-modal" onclick="if(event.target===this)closeSubscriptionModal()"><div class="modal"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title" id="sub-modal-title">새 구독</div><button class="modal-close" onclick="closeSubscriptionModal()">×</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label class="form-label">서비스명</label><input type="text" class="form-input" id="sub-name" placeholder="예: 유튜브 프리미엄" maxlength="30"></div>
+    <div class="form-group"><label class="form-label">금액</label><input type="number" class="form-input" id="sub-amount" placeholder="0" style="text-align:right;font-size:20px;font-weight:700;"></div>
+    <div class="form-group"><label class="form-label">결제 주기</label>
+      <div class="segmented" id="sub-cycle-seg"><button data-cycle="monthly" class="active" onclick="setSubCycle('monthly')">월 구독</button><button data-cycle="yearly" onclick="setSubCycle('yearly')">연 구독</button></div>
+    </div>
+    <div class="form-group"><label class="form-label" id="sub-day-label">결제일 (매월 며칠?)</label>
+      <div class="stepper-row"><button class="stepper-btn" onclick="stepField('sub-day',-1)">−</button><input type="number" class="form-input stepper-input" id="sub-day" min="1" max="31" value="1" style="text-align:center;"><button class="stepper-btn" onclick="stepField('sub-day',1)">+</button></div>
+    </div>
+    <div id="sub-month-wrap" style="display:none;" class="form-group">
+      <label class="form-label">결제월</label>
+      <div class="stepper-row"><button class="stepper-btn" onclick="stepField('sub-month',-1)">−</button><input type="number" class="form-input stepper-input" id="sub-month" min="1" max="12" value="1" style="text-align:center;"><button class="stepper-btn" onclick="stepField('sub-month',1)">+</button></div>
+    </div>
+    <div class="form-group"><label class="form-label">카드/계좌 (선택)</label><input type="text" class="form-input" id="sub-payment" placeholder="예: 신한카드, 카카오뱅크" maxlength="20"></div>
+    <div class="form-group"><label class="form-label">카테고리</label><div class="category-grid" id="sub-category-grid"></div></div>
+    <button class="btn-primary" onclick="saveSubscription()">저장</button>
+    <button class="btn-danger" id="sub-delete-btn" onclick="deleteSubscription()" style="display:none;">삭제</button>
+  </div>
+</div></div>
+
 <script>
 // ========== SUPABASE ==========
 const SUPABASE_URL = 'https://nshsxlocrolzoozuotmz.supabase.co';
@@ -808,7 +896,8 @@ const STORAGE_KEY = 'mybudget_v1';
 const defaultData = {
   transactions:[], budgets:{}, recurring:[], recurringGenerated:{}, assets:[], templates:[],
   todos:[], notes:[], folders:[], bookmarks:[], bookmarkFolders:[], goals:[], recurringTodoGenerated:{},
-  settings:{monthStartDay:1, pin:null}, version:9
+  ceremonials:[], subscriptions:[],
+  settings:{monthStartDay:1, pin:null}, version:10
 };
 
 // ========== STATE ==========
@@ -823,6 +912,9 @@ let todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1, re
 let noteModal = {editingId:null, tags:[], color:'', folder:'', pinned:false};
 let bookmarkModal = {editingId:null, folder:''};
 let goalModal = {editingId:null, category:null, done:false, progressType:'slider', subitems:[], targetVal:0, currentVal:0};
+let ceremonialModal = {editingId:null, type:'expense', category:null};
+let subscriptionModal = {editingId:null, cycle:'monthly', category:null};
+let cerFilter = 'all'; let subFilter = 'all'; let evSub = 'ceremonial';
 let historyFilter = 'all'; let historySearch = ''; let statsTab = 'month';
 let todoFilter = 'active'; let todoSearch = '';
 let noteSearch = ''; let noteFolder = 'all'; let noteTagFilter = null;
@@ -834,6 +926,15 @@ let noteSortMode = false;
 let _sortables = {};
 let recordsSub = 'todos';
 
+const CEREMONIAL_TYPES = [
+  {key:'결혼', emoji:'💍'}, {key:'장례', emoji:'🕯️'}, {key:'생일', emoji:'🎂'},
+  {key:'출산', emoji:'👶'}, {key:'돌잔치', emoji:'🎉'}, {key:'기타', emoji:'🎁'},
+];
+const SUB_CATEGORIES = [
+  {key:'영상', emoji:'📺'}, {key:'음악', emoji:'🎵'}, {key:'게임', emoji:'🎮'},
+  {key:'업무', emoji:'💼'}, {key:'클라우드', emoji:'☁️'}, {key:'뉴스', emoji:'📰'},
+  {key:'쇼핑', emoji:'🛒'}, {key:'기타', emoji:'📱'},
+];
 const GOAL_CATEGORIES = [
   {key:'여행', emoji:'✈️', color:'#3182F6'},
   {key:'경력·성장', emoji:'📈', color:'#00C471'},
@@ -872,6 +973,7 @@ function migrate(d) {
     d.version = 8;
   }
   if (d.version < 9) { d.recurringTodoGenerated = d.recurringTodoGenerated || {}; d.version = 9; }
+  if (d.version < 10) { d.ceremonials = d.ceremonials || []; d.subscriptions = d.subscriptions || []; d.version = 10; }
   return d;
 }
 function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -1180,6 +1282,7 @@ function handleFabClick() {
     else if (recordsSub === 'notes') openNoteModal();
     else if (recordsSub === 'bookmarks') openBookmarkModal();
     else if (recordsSub === 'goals') openGoalModal();
+    else if (recordsSub === 'events') { if (evSub === 'ceremonial') openCeremonialModal(); else openSubscriptionModal(); }
   } else openTxModal();
 }
 document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', () => openPage(btn.dataset.page)));
@@ -1212,6 +1315,7 @@ function renderRecordsPage() {
   else if (recordsSub === 'notes') renderNotes();
   else if (recordsSub === 'bookmarks') renderBookmarks();
   else if (recordsSub === 'goals') renderGoals();
+  else if (recordsSub === 'events') renderEventsPage();
 }
 function setRecordsSub(name) {
   recordsSub = name;
@@ -3124,6 +3228,228 @@ function deleteGoal() {
   if (!confirm('삭제할까요?')) return;
   state.goals = state.goals.filter(g => g.id !== goalModal.editingId);
   save(); closeGoalModal(); render();
+}
+
+// ========== EVENTS (경조사·구독) ==========
+function renderEventsPage() {
+  // 서브탭 필터 리스너 초기화 (한번만)
+  if (!window._evTabsInited) {
+    document.querySelectorAll('[data-ev-sub]').forEach(btn => btn.addEventListener('click', () => {
+      evSub = btn.dataset.evSub;
+      document.querySelectorAll('[data-ev-sub]').forEach(b => b.classList.toggle('active', b === btn));
+      document.getElementById('ev-sub-ceremonial').style.display = evSub === 'ceremonial' ? 'block' : 'none';
+      document.getElementById('ev-sub-subscriptions').style.display = evSub === 'subscriptions' ? 'block' : 'none';
+      renderEventsPage();
+    }));
+    document.querySelectorAll('[data-cer-filter]').forEach(btn => btn.addEventListener('click', () => {
+      cerFilter = btn.dataset.cerFilter;
+      document.querySelectorAll('[data-cer-filter]').forEach(b => b.classList.toggle('active', b === btn));
+      renderCeremonials();
+    }));
+    document.querySelectorAll('[data-sub-filter]').forEach(btn => btn.addEventListener('click', () => {
+      subFilter = btn.dataset.subFilter;
+      document.querySelectorAll('[data-sub-filter]').forEach(b => b.classList.toggle('active', b === btn));
+      renderSubscriptions();
+    }));
+    window._evTabsInited = true;
+  }
+  if (evSub === 'ceremonial') renderCeremonials();
+  else renderSubscriptions();
+}
+
+// --- 경조사 ---
+function renderCeremonials() {
+  const list = document.getElementById('ceremonial-list');
+  if (!list) return;
+  let items = (state.ceremonials || []).slice();
+  if (cerFilter !== 'all') items = items.filter(c => c.type === cerFilter);
+  items.sort((a,b) => b.date.localeCompare(a.date));
+  const totalExp = (state.ceremonials||[]).filter(c=>c.type==='expense').reduce((s,c)=>s+c.amount,0);
+  const totalInc = (state.ceremonials||[]).filter(c=>c.type==='income').reduce((s,c)=>s+c.amount,0);
+  const summary = `<div class="ev-summary">
+    <div class="ev-sum-item"><div class="ev-sum-label">지출 합계</div><div class="ev-sum-value" style="color:var(--danger);">-${fmt(totalExp)}원</div></div>
+    <div style="width:1px;background:var(--border);"></div>
+    <div class="ev-sum-item"><div class="ev-sum-label">수입 합계</div><div class="ev-sum-value" style="color:var(--primary);">+${fmt(totalInc)}원</div></div>
+    <div style="width:1px;background:var(--border);"></div>
+    <div class="ev-sum-item"><div class="ev-sum-label">순</div><div class="ev-sum-value" style="color:${totalInc-totalExp>=0?'var(--primary)':'var(--danger)'};">${totalInc-totalExp>=0?'+':''}${fmt(totalInc-totalExp)}원</div></div>
+  </div>`;
+  if (items.length === 0) { list.innerHTML = summary + `<div class="empty"><span class="empty-emoji">🎊</span><div class="empty-title">경조사를 추가해보세요</div></div>`; return; }
+  list.innerHTML = summary + items.map(c => {
+    const typeInfo = CEREMONIAL_TYPES.find(t => t.key === c.category) || {emoji:'🎁'};
+    const sign = c.type === 'income' ? '+' : '-';
+    const cls = c.type;
+    return `<div class="cer-card ${cls}" onclick="openCeremonialModal('${c.id}')">
+      <span style="font-size:26px;">${typeInfo.emoji}</span>
+      <div class="cer-info"><div class="cer-title">${escapeHtml(c.name)} · ${escapeHtml(c.category||'')}</div><div class="cer-sub">${c.date}${c.memo?' · '+escapeHtml(c.memo):''}</div></div>
+      <div class="cer-amount" style="color:${c.type==='income'?'var(--primary)':'var(--danger)'};">${sign}${fmt(c.amount)}원</div>
+    </div>`;
+  }).join('');
+}
+function openCeremonialModal(id) {
+  if (id) {
+    const c = (state.ceremonials||[]).find(x=>x.id===id);
+    if (!c) return;
+    ceremonialModal = {editingId:id, type:c.type, category:c.category};
+    document.getElementById('ceremonial-modal-title').textContent = '경조사 수정';
+    document.getElementById('cer-date').value = c.date;
+    document.getElementById('cer-name').value = c.name;
+    document.getElementById('cer-amount').value = c.amount;
+    document.getElementById('cer-memo').value = c.memo||'';
+    document.getElementById('cer-delete-btn').style.display = 'block';
+  } else {
+    ceremonialModal = {editingId:null, type:'expense', category:null};
+    document.getElementById('ceremonial-modal-title').textContent = '새 경조사';
+    document.getElementById('cer-date').value = today();
+    document.getElementById('cer-name').value = '';
+    document.getElementById('cer-amount').value = '';
+    document.getElementById('cer-memo').value = '';
+    document.getElementById('cer-delete-btn').style.display = 'none';
+  }
+  setCerType(ceremonialModal.type);
+  renderCerCategoryGrid();
+  document.getElementById('ceremonial-modal').classList.add('active');
+}
+function closeCeremonialModal() { document.getElementById('ceremonial-modal').classList.remove('active'); }
+function setCerType(t) {
+  ceremonialModal.type = t;
+  document.getElementById('cer-type-expense').classList.toggle('active', t==='expense');
+  document.getElementById('cer-type-income').classList.toggle('active', t==='income');
+}
+function renderCerCategoryGrid() {
+  document.getElementById('cer-category-grid').innerHTML = CEREMONIAL_TYPES.map(t =>
+    `<button class="category-btn ${ceremonialModal.category===t.key?'active':''}" onclick="ceremonialModal.category='${t.key}';renderCerCategoryGrid()"><span class="emoji">${t.emoji}</span><span>${t.key}</span></button>`
+  ).join('');
+}
+function saveCeremonial() {
+  const date = document.getElementById('cer-date').value;
+  const name = document.getElementById('cer-name').value.trim();
+  const amount = +document.getElementById('cer-amount').value||0;
+  const memo = document.getElementById('cer-memo').value.trim();
+  if (!name) { alert('이름을 입력하세요'); return; }
+  if (!amount) { alert('금액을 입력하세요'); return; }
+  state.ceremonials = state.ceremonials||[];
+  if (ceremonialModal.editingId) {
+    const c = state.ceremonials.find(x=>x.id===ceremonialModal.editingId);
+    if (c) Object.assign(c, {type:ceremonialModal.type, date, name, category:ceremonialModal.category, amount, memo, updatedAt:Date.now()});
+  } else {
+    state.ceremonials.push({id:'cer_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), type:ceremonialModal.type, date, name, category:ceremonialModal.category, amount, memo, createdAt:Date.now()});
+  }
+  save(); closeCeremonialModal(); renderCeremonials();
+}
+function deleteCeremonial() {
+  if (!confirm('삭제할까요?')) return;
+  state.ceremonials = state.ceremonials.filter(c=>c.id!==ceremonialModal.editingId);
+  save(); closeCeremonialModal(); renderCeremonials();
+}
+
+// --- 구독 ---
+function getNextSubDate(s) {
+  const now = new Date(); const td = now.getDate(); const tm = now.getMonth()+1; const ty = now.getFullYear();
+  if (s.cycle === 'monthly') {
+    const day = s.day||1;
+    if (day >= td) return `${ty}-${String(tm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const next = new Date(ty, tm, day);
+    return next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+  } else {
+    const month = s.month||1; const day = s.day||1;
+    if (month > tm || (month===tm && day>=td)) return `${ty}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    return `${ty+1}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+}
+function renderSubscriptions() {
+  const list = document.getElementById('subscriptions-list');
+  if (!list) return;
+  let items = (state.subscriptions||[]).slice();
+  if (subFilter !== 'all') items = items.filter(s=>s.cycle===subFilter);
+  const totalMonth = (state.subscriptions||[]).filter(s=>s.cycle==='monthly').reduce((sum,s)=>sum+s.amount,0);
+  const totalYear = (state.subscriptions||[]).filter(s=>s.cycle==='yearly').reduce((sum,s)=>sum+s.amount,0);
+  const summary = `<div class="ev-summary">
+    <div class="ev-sum-item"><div class="ev-sum-label">월 구독 합계</div><div class="ev-sum-value" style="color:var(--danger);">${fmt(totalMonth)}원</div></div>
+    <div style="width:1px;background:var(--border);"></div>
+    <div class="ev-sum-item"><div class="ev-sum-label">연 구독 합계</div><div class="ev-sum-value" style="color:var(--danger);">${fmt(totalYear)}원</div></div>
+  </div>`;
+  if (items.length === 0) { list.innerHTML = summary + `<div class="empty"><span class="empty-emoji">📱</span><div class="empty-title">구독을 추가해보세요</div></div>`; return; }
+  // 다음 결제일 기준 정렬
+  items.sort((a,b) => getNextSubDate(a).localeCompare(getNextSubDate(b)));
+  const td = today();
+  list.innerHTML = summary + items.map(s => {
+    const cat = SUB_CATEGORIES.find(c=>c.key===s.category)||{emoji:'📱'};
+    const nextDate = getNextSubDate(s);
+    const diff = Math.ceil((new Date(nextDate+'T00:00:00') - new Date(td+'T00:00:00'))/86400000);
+    const cancelDate = new Date(nextDate+'T00:00:00'); cancelDate.setDate(cancelDate.getDate()-1);
+    const cancelStr = cancelDate.toISOString().slice(0,10);
+    let dday = diff===0?'오늘 결제':diff===1?'내일 결제':`D-${diff}`;
+    let warning = '';
+    if (diff <= 3 && diff > 0) warning = `<div class="sub-warning">⚠️ ${cancelStr}까지 해지</div>`;
+    else if (diff === 0) warning = `<div class="sub-warning">🔴 오늘 결제일</div>`;
+    const cycleLabel = s.cycle==='monthly'?`매월 ${s.day}일`:`매년 ${s.month}월 ${s.day}일`;
+    const metaParts = [cycleLabel, s.payment||''].filter(Boolean).join(' · ');
+    return `<div class="sub-card" onclick="openSubscriptionModal('${s.id}')">
+      <div class="sub-icon">${cat.emoji}</div>
+      <div class="sub-info"><div class="sub-name">${escapeHtml(s.name)}</div><div class="sub-meta">${metaParts}</div>${warning}</div>
+      <div class="sub-amount"><div class="sub-price">${fmt(s.amount)}원</div><div class="sub-cycle">${s.cycle==='monthly'?'월':'연'} · ${dday}</div></div>
+    </div>`;
+  }).join('');
+}
+function openSubscriptionModal(id) {
+  if (id) {
+    const s = (state.subscriptions||[]).find(x=>x.id===id);
+    if (!s) return;
+    subscriptionModal = {editingId:id, cycle:s.cycle, category:s.category};
+    document.getElementById('sub-modal-title').textContent = '구독 수정';
+    document.getElementById('sub-name').value = s.name;
+    document.getElementById('sub-amount').value = s.amount;
+    document.getElementById('sub-day').value = s.day||1;
+    document.getElementById('sub-month').value = s.month||1;
+    document.getElementById('sub-payment').value = s.payment||'';
+    document.getElementById('sub-delete-btn').style.display = 'block';
+  } else {
+    subscriptionModal = {editingId:null, cycle:'monthly', category:null};
+    document.getElementById('sub-modal-title').textContent = '새 구독';
+    document.getElementById('sub-name').value = '';
+    document.getElementById('sub-amount').value = '';
+    document.getElementById('sub-day').value = 1;
+    document.getElementById('sub-month').value = 1;
+    document.getElementById('sub-payment').value = '';
+    document.getElementById('sub-delete-btn').style.display = 'none';
+  }
+  setSubCycle(subscriptionModal.cycle);
+  renderSubCategoryGrid();
+  document.getElementById('subscription-modal').classList.add('active');
+}
+function closeSubscriptionModal() { document.getElementById('subscription-modal').classList.remove('active'); }
+function setSubCycle(c) {
+  subscriptionModal.cycle = c;
+  document.querySelectorAll('#sub-cycle-seg button').forEach(b=>b.classList.toggle('active',b.dataset.cycle===c));
+  document.getElementById('sub-day-label').textContent = c==='monthly'?'결제일 (매월 며칠?)':'결제일 (며칠?)';
+  document.getElementById('sub-month-wrap').style.display = c==='yearly'?'block':'none';
+}
+function renderSubCategoryGrid() {
+  document.getElementById('sub-category-grid').innerHTML = SUB_CATEGORIES.map(c =>
+    `<button class="category-btn ${subscriptionModal.category===c.key?'active':''}" onclick="subscriptionModal.category='${c.key}';renderSubCategoryGrid()"><span class="emoji">${c.emoji}</span><span>${c.key}</span></button>`
+  ).join('');
+}
+function saveSubscription() {
+  const name = document.getElementById('sub-name').value.trim();
+  const amount = +document.getElementById('sub-amount').value||0;
+  const day = +document.getElementById('sub-day').value||1;
+  const month = +document.getElementById('sub-month').value||1;
+  const payment = document.getElementById('sub-payment').value.trim();
+  if (!name) { alert('서비스명을 입력하세요'); return; }
+  if (!amount) { alert('금액을 입력하세요'); return; }
+  state.subscriptions = state.subscriptions||[];
+  if (subscriptionModal.editingId) {
+    const s = state.subscriptions.find(x=>x.id===subscriptionModal.editingId);
+    if (s) Object.assign(s, {name, amount, cycle:subscriptionModal.cycle, day, month, payment, category:subscriptionModal.category, updatedAt:Date.now()});
+  } else {
+    state.subscriptions.push({id:'sub_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name, amount, cycle:subscriptionModal.cycle, day, month, payment, category:subscriptionModal.category, createdAt:Date.now()});
+  }
+  save(); closeSubscriptionModal(); renderSubscriptions();
+}
+function deleteSubscription() {
+  if (!confirm('삭제할까요?')) return;
+  state.subscriptions = state.subscriptions.filter(s=>s.id!==subscriptionModal.editingId);
+  save(); closeSubscriptionModal(); renderSubscriptions();
 }
 
 // ========== EXPORT ==========
