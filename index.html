@@ -1035,6 +1035,12 @@ async function handleHomeSync() {
   await syncPush();
   if (btn) btn.style.opacity = '1';
 }
+function openModal(id) {
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  const modal = el.querySelector('.modal');
+  if (modal) modal.scrollTop = 0;
+}
 function showSync(text, type) {
   const el = document.getElementById('sync-indicator');
   el.classList.remove('syncing','error');
@@ -1691,7 +1697,7 @@ function openTxModal(id) {
   setTxType(txModal.type, true);
   renderTxAmount();
   renderTxTemplates();
-  document.getElementById('tx-modal').classList.add('active');
+  openModal('tx-modal');
 }
 function closeTxModal() { document.getElementById('tx-modal').classList.remove('active'); }
 function setTxType(type, keep) {
@@ -1835,7 +1841,7 @@ function saveAsTemplate() {
   state.templates.push({id:'tpl_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), name, type:txModal.type, amount:txModal.amount, category:txModal.category, subCategory:txModal.subCategory, accountId:txModal.accountId, fromAccountId:txModal.fromAccountId, toAccountId:txModal.toAccountId, memo:txModal.memo, createdAt:Date.now()});
   save(); alert('저장됐어요'); renderTxTemplates(); renderSettings();
 }
-function openTemplatesModal() { renderTemplatesList(); document.getElementById('templates-modal').classList.add('active'); }
+function openTemplatesModal() { renderTemplatesList(); openModal('templates-modal'); }
 function closeTemplatesModal() { document.getElementById('templates-modal').classList.remove('active'); }
 function renderTemplatesList() {
   const el = document.getElementById('templates-list');
@@ -1854,7 +1860,7 @@ function deleteTemplate(id) {
 }
 
 // ========== RECURRING ==========
-function openRecurringModal() { renderRecurringList(); document.getElementById('recurring-modal').classList.add('active'); }
+function openRecurringModal() { renderRecurringList(); openModal('recurring-modal'); }
 function closeRecurringModal() { document.getElementById('recurring-modal').classList.remove('active'); }
 function renderRecurringList() {
   const el = document.getElementById('recurring-list');
@@ -1894,7 +1900,7 @@ function openRecurringEditModal(id) {
     setRecType('expense');
     setRecPayMethod('');
   }
-  document.getElementById('recurring-edit-modal').classList.add('active');
+  openModal('recurring-edit-modal');
 }
 function closeRecurringEditModal() { document.getElementById('recurring-edit-modal').classList.remove('active'); }
 function setRecPayMethod(m) {
@@ -2020,7 +2026,7 @@ function openAssetModal(id) {
   // 토글 상태 반영
   const toggleEl = document.getElementById('asset-include-toggle');
   if (toggleEl) toggleEl.classList.toggle('active', assetModal.includeInTotal !== false);
-  document.getElementById('asset-modal').classList.add('active');
+  openModal('asset-modal');
 }
 function closeAssetModal() { document.getElementById('asset-modal').classList.remove('active'); }
 function toggleAssetInclude() {
@@ -2348,7 +2354,7 @@ function renderAssets() {
 // ========== MONTH START ==========
 function openMonthStartModal() {
   document.getElementById('month-start-input').value = state.settings.monthStartDay || 1;
-  document.getElementById('month-start-modal').classList.add('active');
+  openModal('month-start-modal');
 }
 function closeMonthStartModal() { document.getElementById('month-start-modal').classList.remove('active'); }
 function saveMonthStart() {
@@ -2360,7 +2366,7 @@ function saveMonthStart() {
 function openPinSetupModal() {
   document.getElementById('pin-setup-on-view').style.display = state.settings.pin ? 'none' : 'block';
   document.getElementById('pin-setup-off-view').style.display = state.settings.pin ? 'block' : 'none';
-  document.getElementById('pin-setup-modal').classList.add('active');
+  openModal('pin-setup-modal');
 }
 function closePinSetupModal() { document.getElementById('pin-setup-modal').classList.remove('active'); }
 function startPinSetup() { closePinSetupModal(); pinMode='setup1'; pinBuffer=''; pinFirstEntry=''; showPinOverlay('PIN 설정','새 PIN 4자리 입력'); }
@@ -2553,7 +2559,7 @@ function openTodoModal(id) {
   const ydayEl = document.getElementById('todo-recurring-yday');
   if (ydayEl) ydayEl.value = todoModal.recurringDay;
   setTodoRecurType(todoModal.recurType || 'month');
-  document.getElementById('todo-modal').classList.add('active');
+  openModal('todo-modal');
   setTimeout(() => document.getElementById('todo-title').focus(), 200);
 }
 function closeTodoModal() { document.getElementById('todo-modal').classList.remove('active'); }
@@ -2736,7 +2742,7 @@ function openNoteModal(id) {
   renderNoteModalColorPicker();
   renderNoteModalPinBtn();
   renderNoteModalTagSuggestions();
-  document.getElementById('note-modal').classList.add('active');
+  openModal('note-modal');
 }
 function closeNoteModal() { document.getElementById('note-modal').classList.remove('active'); }
 function renderNoteModalChips() {
@@ -2941,7 +2947,7 @@ function openBookmarkModal(id) {
     document.getElementById('bookmark-delete-btn').style.display = 'none';
   }
   renderBookmarkFolderSelect();
-  document.getElementById('bookmark-modal').classList.add('active');
+  openModal('bookmark-modal');
 }
 function closeBookmarkModal() { document.getElementById('bookmark-modal').classList.remove('active'); }
 function renderBookmarkFolderSelect() {
@@ -3214,7 +3220,7 @@ function openGoalModal(id) {
   renderGoalCategoryGrid();
   setGoalProgressType(goalModal.progressType);
   renderGoalSubitems();
-  document.getElementById('goal-modal').classList.add('active');
+  openModal('goal-modal');
 }
 function closeGoalModal() { document.getElementById('goal-modal').classList.remove('active'); }
 function renderGoalCategoryGrid() {
@@ -3356,7 +3362,7 @@ function openCeremonialModal(id) {
   }
   setCerType(ceremonialModal.type);
   renderCerCategoryGrid();
-  document.getElementById('ceremonial-modal').classList.add('active');
+  openModal('ceremonial-modal');
 }
 function closeCeremonialModal() { document.getElementById('ceremonial-modal').classList.remove('active'); }
 function setCerType(t) {
@@ -3464,7 +3470,7 @@ function openSubscriptionModal(id) {
   }
   setSubCycle(subscriptionModal.cycle);
   renderSubCategoryGrid();
-  document.getElementById('subscription-modal').classList.add('active');
+  openModal('subscription-modal');
 }
 function closeSubscriptionModal() { document.getElementById('subscription-modal').classList.remove('active'); }
 function setSubCycle(c) {
@@ -3506,7 +3512,7 @@ function openCategoryManageModal() {
   catManageType = 'expense';
   document.querySelectorAll('[data-catmg]').forEach(b => b.classList.toggle('active', b.dataset.catmg === 'expense'));
   renderCategoryManageList();
-  document.getElementById('category-manage-modal').classList.add('active');
+  openModal('category-manage-modal');
 }
 function closeCategoryManageModal() { document.getElementById('category-manage-modal').classList.remove('active'); }
 function setCatManageType(t) {
@@ -3547,7 +3553,7 @@ function openAddCategoryModal() {
   document.getElementById('add-cat-emoji').value = '';
   document.getElementById('add-cat-name').value = '';
   document.getElementById('add-cat-delete-btn').style.display = 'none';
-  document.getElementById('add-category-modal').classList.add('active');
+  openModal('add-category-modal');
 }
 function openEditCategoryModal(key, kind) {
   const cats = kind === 'base' ? CATEGORIES[catManageType] : (state.customCategories[catManageType] || []);
@@ -3558,7 +3564,7 @@ function openEditCategoryModal(key, kind) {
   document.getElementById('add-cat-emoji').value = cat.emoji;
   document.getElementById('add-cat-name').value = cat.key;
   document.getElementById('add-cat-delete-btn').style.display = kind === 'custom' ? 'block' : 'none';
-  document.getElementById('add-category-modal').classList.add('active');
+  openModal('add-category-modal');
 }
 function closeAddCategoryModal() { document.getElementById('add-category-modal').classList.remove('active'); }
 function saveCategory() {
@@ -3598,7 +3604,7 @@ function openFolderManageModal() {
   folderManageType = 'notes';
   document.querySelectorAll('[data-fldmg]').forEach(b => b.classList.toggle('active', b.dataset.fldmg === 'notes'));
   renderFolderManageList();
-  document.getElementById('folder-manage-modal').classList.add('active');
+  openModal('folder-manage-modal');
 }
 function closeFolderManageModal() { document.getElementById('folder-manage-modal').classList.remove('active'); }
 function setFolderManageType(t) {
