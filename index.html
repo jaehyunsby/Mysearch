@@ -3803,40 +3803,43 @@ function renderSavings() {
     el.innerHTML = html;
 
   } else {
-    // 연간 뷰
+    // 연간 뷰 - 월별 통합 총액
     const yearTotal = items.reduce((s, item) => s + getYearTotal(item.id, year), 0);
     let html = modeHtml;
     html += `<div style="margin:0 20px 14px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
-      <div style="font-size:13px;opacity:.8;margin-bottom:6px;">${year}년 연간 저축</div>
+      <div style="font-size:13px;opacity:.8;margin-bottom:6px;">${year}년 연간 저축 합계</div>
       <div style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;">${fmt(yearTotal)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div>
+      <div style="font-size:13px;opacity:.7;margin-top:6px;">월 평균 ${fmt(Math.round(yearTotal/12))}원</div>
     </div>`;
 
-    // 항목별 연간 표
-    html += items.map(item => {
-      const annualTotal = getYearTotal(item.id, year);
-      const annualTarget = (item.target||0) * 12;
-      const months = Array.from({length:12},(_,i)=>i+1);
-      const rows = months.map(m => {
-        const log = getSavingsLog(item.id, year, m);
-        const amt = log ? log.amount : 0;
+    // 월별 통합 표
+    html += `<div style="margin:0 20px 12px;background:var(--card);border-radius:16px;overflow:hidden;">
+      <div style="padding:12px 16px;background:var(--bg);font-size:13px;font-weight:700;">월별 저축 현황</div>
+      <div style="padding:0 16px;">` +
+      Array.from({length:12},(_,i)=>i+1).map(m => {
+        const monthTotal = items.reduce((s, item) => {
+          const log = getSavingsLog(item.id, year, m);
+          return s + (log ? log.amount : 0);
+        }, 0);
         const isCurrent = m === month;
-        return `<div style="display:flex;align-items:center;padding:9px 0;${m>1?'border-top:1px solid var(--border);':''}" onclick="openSavingsLogModal('${item.id}', ${year}, ${m})">
-          <div style="width:36px;font-size:13px;font-weight:${isCurrent?'800':'400'};color:${isCurrent?'var(--primary)':'var(--text-sub)'};">${m}월</div>
-          <div style="flex:1;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:${amt>0?'var(--text)':'var(--text-placeholder)'};">${amt>0?fmt(amt)+'원':'—'}</div>
-          ${log&&log.memo?`<div style="font-size:11px;color:var(--text-sub);">${escapeHtml(log.memo)}</div>`:''}
-          <span style="color:var(--text-placeholder);font-size:16px;">›</span>
+        const hasSomething = monthTotal > 0;
+        // 항목별 미니 내역
+        const details = items.filter(item => {
+          const log = getSavingsLog(item.id, year, m);
+          return log && log.amount > 0;
+        }).map(item => {
+          const log = getSavingsLog(item.id, year, m);
+          return `<span style="font-size:11px;color:var(--text-sub);">${item.icon||'🐖'} ${fmt(log.amount)}</span>`;
+        }).join(' · ');
+        return `<div style="display:flex;align-items:center;padding:11px 0;${m>1?'border-top:1px solid var(--border);':''}">
+          <div style="width:40px;font-size:14px;font-weight:${isCurrent?'800':'500'};color:${isCurrent?'var(--primary)':'var(--text-sub)'};">${m}월</div>
+          <div style="flex:1;min-width:0;">
+            ${hasSomething?`<div style="font-size:11px;color:var(--text-sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${details}</div>`:''}
+          </div>
+          <div style="font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;color:${hasSomething?'var(--primary)':'var(--text-placeholder)'};">${hasSomething?fmt(monthTotal)+'원':'—'}</div>
         </div>`;
-      }).join('');
-      return `<div style="margin:0 20px 12px;background:var(--card);border-radius:16px;overflow:hidden;">
-        <div style="padding:12px 16px;background:var(--bg);display:flex;align-items:center;gap:10px;">
-          <span style="font-size:22px;">${item.icon||'🐖'}</span>
-          <div style="flex:1;font-weight:700;">${escapeHtml(item.name)}</div>
-          <div style="text-align:right;"><div style="font-weight:800;font-size:15px;color:var(--primary);font-variant-numeric:tabular-nums;">${fmt(annualTotal)}원</div>${annualTarget>0?`<div style="font-size:11px;color:var(--text-sub);">연목표 ${fmt(annualTarget)}원</div>`:''}</div>
-          <button onclick="event.stopPropagation();openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-sub);font-size:18px;">⋯</button>
-        </div>
-        <div style="padding:0 16px;">${rows}</div>
-      </div>`;
-    }).join('');
+      }).join('') +
+      `</div></div>`;
 
     el.innerHTML = html;
   }
