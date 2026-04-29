@@ -551,6 +551,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="menu-list">
       <button class="menu-item" onclick="openMonthStartModal()"><div style="font-weight:500;">월 기준일</div><div style="display:flex;align-items:center;gap:6px;"><span class="value-text" id="month-start-label">매월 1일</span><span class="arrow">›</span></div></button>
       <button class="menu-item" onclick="openPinSetupModal()"><div style="font-weight:500;">PIN 잠금</div><div style="display:flex;align-items:center;gap:6px;"><span class="value-text" id="pin-status-label">꺼짐</span><span class="arrow">›</span></div></button>
+      <button class="menu-item" id="change-pw-menu" onclick="openChangePasswordModal()" style="display:none;"><div style="font-weight:500;">비밀번호 변경</div><span class="arrow">›</span></button>
     </div>
     <div class="menu-list">
       <button class="menu-item" onclick="exportCSV()"><div style="font-weight:500;">CSV 내보내기</div><span class="arrow">›</span></button>
@@ -946,6 +947,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div></div>
 
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-backdrop" id="change-pw-modal" onclick="if(event.target===this)closeChangePasswordModal()"><div class="modal"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title">비밀번호 변경</div><button class="modal-close" onclick="closeChangePasswordModal()">×</button></div>
+  <div class="modal-body">
+    <div class="login-msg" id="change-pw-msg"></div>
+    <div class="form-group"><label class="form-label">새 비밀번호 (6자 이상)</label><input type="password" class="form-input" id="change-pw-new" placeholder="새 비밀번호"></div>
+    <div class="form-group"><label class="form-label">비밀번호 확인</label><input type="password" class="form-input" id="change-pw-confirm" placeholder="비밀번호 확인"></div>
+    <button class="btn-primary" onclick="handleChangePassword()">변경</button>
+  </div>
+</div></div>
+
 <script>
 // ========== SUPABASE ==========
 const SUPABASE_URL = 'https://nshsxlocrolzoozuotmz.supabase.co';
@@ -1154,16 +1166,15 @@ function scheduleSync() {
 // ========== AUTH ==========
 async function initAuth() {
   if (!sb) { showLoginOverlay(); startApp(); return; }
-  // 비밀번호 재설정 링크 감지
-  const hash = window.location.hash;
-  if (hash.includes('type=recovery')) {
-    const { data: { session }, error } = await sb.auth.getSession();
-    if (session) {
+  // 비밀번호 재설정 이벤트 감지
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
       document.getElementById('reset-overlay').classList.add('active');
-      window.location.hash = '';
-      return;
+      document.getElementById('login-overlay').classList.remove('active');
+    } else if (event === 'SIGNED_OUT') {
+      authUser = null; showLoginOverlay();
     }
-  }
+  });
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
     authUser = session.user;
@@ -1176,11 +1187,36 @@ async function initAuth() {
   } else {
     showLoginOverlay();
   }
-  sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT') { authUser = null; showLoginOverlay(); }
-  });
 }
-function showLoginOverlay() { document.getElementById('login-overlay').classList.add('active'); }
+function openChangePasswordModal() {
+  document.getElementById('change-pw-msg').textContent = '';
+  document.getElementById('change-pw-new').value = '';
+  document.getElementById('change-pw-confirm').value = '';
+  openModal('change-pw-modal');
+}
+function closeChangePasswordModal() { document.getElementById('change-pw-modal').classList.remove('active'); }
+async function handleChangePassword() {
+  const pw = document.getElementById('change-pw-new').value;
+  const pw2 = document.getElementById('change-pw-confirm').value;
+  const msg = document.getElementById('change-pw-msg');
+  msg.textContent = '';
+  if (pw.length < 6) { msg.textContent = '비밀번호는 6자 이상'; return; }
+  if (pw !== pw2) { msg.textContent = '비밀번호가 일치하지 않아요'; return; }
+  const btn = document.querySelector('#change-pw-modal .btn-primary');
+  btn.disabled = true; btn.textContent = '변경 중...';
+  try {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) throw error;
+    msg.style.color = 'var(--primary)';
+    msg.textContent = '✓ 비밀번호가 변경됐어요';
+    setTimeout(() => closeChangePasswordModal(), 1500);
+  } catch(e) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = e.message || '변경 실패';
+  } finally {
+    btn.disabled = false; btn.textContent = '변경';
+  }
+}
 function hideLoginOverlay() { document.getElementById('login-overlay').classList.remove('active'); }
 function toggleLoginMode() {
   loginMode = loginMode === 'signin' ? 'signup' : 'signin';
@@ -1666,6 +1702,9 @@ function renderSettings() {
   const sd = state.settings.monthStartDay || 1;
   document.getElementById('month-start-label').textContent = sd === 1 ? '매월 1일' : '매월 ' + sd + '일';
   document.getElementById('pin-status-label').textContent = state.settings.pin ? '켜짐' : '꺼짐';
+  // 비밀번호 변경 메뉴 - 로그인 시만 표시
+  const changePwMenu = document.getElementById('change-pw-menu');
+  if (changePwMenu) changePwMenu.style.display = authUser ? 'flex' : 'none';
   // Account section
   const el = document.getElementById('settings-account-list');
   if (authUser) {
