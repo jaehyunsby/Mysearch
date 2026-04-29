@@ -366,7 +366,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <span id="login-switch-text">계정이 없으신가요?</span>
       <button onclick="toggleLoginMode()" id="login-switch-btn">회원가입</button>
     </div>
-    <div style="text-align:center;"><button class="login-skip" onclick="skipLogin()">로그인 없이 사용 (로컬만)</button></div>
+    <div style="text-align:center;margin-top:8px;">
+      <button onclick="handleForgotPassword()" style="background:none;border:none;color:var(--text-sub);font-size:13px;text-decoration:underline;cursor:pointer;">비밀번호를 잊으셨나요?</button>
+    </div>
+    <div style="text-align:center;"><div style="font-size:12px;color:var(--text-placeholder);margin-top:12px;">회원가입 후 모든 기능을 사용할 수 있어요</div></div>
   </div>
 </div>
 <!-- PIN OVERLAY -->
@@ -1139,7 +1142,7 @@ function scheduleSync() {
 
 // ========== AUTH ==========
 async function initAuth() {
-  if (!sb) { hideLoginOverlay(); startApp(); return; }
+  if (!sb) { showLoginOverlay(); startApp(); return; }
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
     authUser = session.user;
@@ -1206,7 +1209,24 @@ async function handleLoginSubmit() {
     btn.textContent = loginMode === 'signin' ? '로그인' : '가입하기';
   }
 }
-function skipLogin() { hideLoginOverlay(); startApp(); }
+async function handleForgotPassword() {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) { document.getElementById('login-msg').textContent = '이메일을 먼저 입력하세요'; return; }
+  if (!sb) { document.getElementById('login-msg').textContent = '연결 오류'; return; }
+  const msg = document.getElementById('login-msg');
+  msg.textContent = '전송 중...';
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://jaehyunsby.github.io/Mysearch/'
+    });
+    if (error) throw error;
+    msg.style.color = 'var(--primary)';
+    msg.textContent = '✓ 재설정 링크를 이메일로 보냈어요';
+  } catch(e) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = e.message || '전송 실패';
+  }
+}
 async function signOut() {
   if (!sb || !authUser) return;
   if (!confirm('로그아웃 할까요?')) return;
