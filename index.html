@@ -406,6 +406,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="tab-btn" data-budget-sub="assets">자산</button>
       <button class="tab-btn" data-budget-sub="fixed">고정지출</button>
       <button class="tab-btn" data-budget-sub="paydates">결제일</button>
+      <button class="tab-btn" data-budget-sub="savings">저축</button>
       <button class="tab-btn" data-budget-sub="stats">통계</button>
     </div>
     <div id="budget-sub-history" class="budget-sub active">
@@ -429,6 +430,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="fixed-summary"></div>
       <div id="fixed-list"></div>
       <div style="padding:4px 20px 20px;"><button class="btn-primary" onclick="openRecurringEditModal()">+ 고정지출 추가</button></div>
+    </div>
+    <div id="budget-sub-savings" class="budget-sub">
+      <div id="savings-content"></div>
+      <div style="padding:4px 20px 20px;"><button class="btn-primary" onclick="openSavingsItemModal()">+ 저축 항목 추가</button></div>
     </div>
     <div id="budget-sub-stats" class="budget-sub">
       <div class="tab-group" style="padding-top:0;"><button class="tab-btn active" data-stat="month">이번 달</button><button class="tab-btn" data-stat="trend">월별 추이</button></div>
@@ -901,6 +906,32 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div></div>
 
+<!-- SAVINGS ITEM MODAL -->
+<div class="modal-backdrop" id="savings-item-modal" onclick="if(event.target===this)closeSavingsItemModal()"><div class="modal"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title" id="savings-item-title">저축 항목 추가</div><button class="modal-close" onclick="closeSavingsItemModal()">×</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label class="form-label">항목명</label><input type="text" class="form-input" id="sav-item-name" placeholder="예: 적금, 주식, 대출원금" maxlength="20"></div>
+    <div class="form-group"><label class="form-label">아이콘</label>
+      <div class="category-grid" id="sav-item-icon-grid"></div>
+    </div>
+    <div class="form-group"><label class="form-label">월 목표금액 (선택)</label><input type="number" class="form-input" id="sav-item-target" placeholder="0" style="text-align:right;"></div>
+    <button class="btn-primary" onclick="saveSavingsItem()">저장</button>
+    <button class="btn-danger" id="sav-item-delete-btn" onclick="deleteSavingsItem()" style="display:none;">삭제</button>
+  </div>
+</div></div>
+
+<!-- SAVINGS LOG MODAL -->
+<div class="modal-backdrop" id="savings-log-modal" onclick="if(event.target===this)closeSavingsLogModal()"><div class="modal"><div class="modal-handle"></div>
+  <div class="modal-header"><div class="modal-title" id="savings-log-title">저축 입력</div><button class="modal-close" onclick="closeSavingsLogModal()">×</button></div>
+  <div class="modal-body">
+    <div style="font-size:13px;color:var(--text-sub);margin-bottom:16px;" id="savings-log-period"></div>
+    <div class="form-group"><label class="form-label">금액</label><input type="number" class="form-input" id="sav-log-amount" placeholder="0" style="text-align:right;font-size:20px;font-weight:700;"></div>
+    <div class="form-group"><label class="form-label">메모 (선택)</label><input type="text" class="form-input" id="sav-log-memo" placeholder="" maxlength="30"></div>
+    <button class="btn-primary" onclick="saveSavingsLog()">저장</button>
+    <button class="btn-danger" id="sav-log-delete-btn" onclick="deleteSavingsLog()" style="display:none;">삭제</button>
+  </div>
+</div></div>
+
 <script>
 // ========== SUPABASE ==========
 const SUPABASE_URL = 'https://nshsxlocrolzoozuotmz.supabase.co';
@@ -937,7 +968,8 @@ const defaultData = {
   todos:[], notes:[], folders:[], bookmarks:[], bookmarkFolders:[], goals:[], recurringTodoGenerated:{},
   ceremonials:[], subscriptions:[],
   customCategories:{expense:[], income:[]},
-  settings:{monthStartDay:1, pin:null}, version:11
+  savingsItems:[], savingsLogs:[],
+  settings:{monthStartDay:1, pin:null}, version:12
 };
 
 // ========== STATE ==========
@@ -958,6 +990,9 @@ let cerFilter = 'all'; let subFilter = 'all'; let evSub = 'ceremonial';
 let catManageType = 'expense';
 let catEditKey = null; // 수정 중인 카테고리 key
 let folderManageType = 'notes';
+let savingsItemModal = {editingId:null, icon:'🐖'};
+let savingsLogModal = {editingId:null, itemId:null};
+let savingsViewMode = 'month';
 let historyFilter = 'all'; let historySearch = ''; let statsTab = 'month';
 let todoFilter = 'active'; let todoSearch = '';
 let noteSearch = ''; let noteFolder = 'all'; let noteTagFilter = null;
@@ -1018,6 +1053,7 @@ function migrate(d) {
   if (d.version < 9) { d.recurringTodoGenerated = d.recurringTodoGenerated || {}; d.version = 9; }
   if (d.version < 10) { d.ceremonials = d.ceremonials || []; d.subscriptions = d.subscriptions || []; d.version = 10; }
   if (d.version < 11) { d.customCategories = d.customCategories || {expense:[], income:[]}; d.version = 11; }
+  if (d.version < 12) { d.savingsItems = d.savingsItems || []; d.savingsLogs = d.savingsLogs || []; d.version = 12; }
   return d;
 }
 function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -1393,6 +1429,7 @@ function renderBudgetPage() {
   else if (budgetSub === 'assets') renderAssets();
   else if (budgetSub === 'fixed') renderFixedExpenses();
   else if (budgetSub === 'paydates') renderPayDates();
+  else if (budgetSub === 'savings') renderSavings();
   else if (budgetSub === 'stats') renderStats();
   else if (budgetSub === 'plan') renderBudget();
 }
@@ -3682,6 +3719,206 @@ function deleteFolderConfirm(name) {
     state.bookmarkFolders = (state.bookmarkFolders||[]).filter(f => f !== name);
   }
   save(); renderFolderManageList(); render();
+}
+
+// ========== SAVINGS ==========
+const SAV_ICONS = ['🐖', '📈', '🏦', '🏠', '💎', '💰', '🎯', '✈️', '🚗', '📚'];
+
+function getSavingsLogKey(itemId, year, month) {
+  return `${itemId}-${year}-${String(month).padStart(2,'0')}`;
+}
+function getSavingsLog(itemId, year, month) {
+  const key = getSavingsLogKey(itemId, year, month);
+  return (state.savingsLogs||[]).find(l => l.key === key);
+}
+function getYearTotal(itemId, year) {
+  let total = 0;
+  for (let m = 1; m <= 12; m++) {
+    const log = getSavingsLog(itemId, year, m);
+    if (log) total += log.amount;
+  }
+  return total;
+}
+
+function renderSavings() {
+  const el = document.getElementById('savings-content');
+  if (!el) return;
+  const items = state.savingsItems || [];
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth() + 1;
+
+  // 뷰 모드 토글
+  const modeHtml = `<div style="padding:0 20px 14px;display:flex;gap:8px;align-items:center;">
+    <div class="segmented" style="flex:1;">
+      <button class="${savingsViewMode==='month'?'active':''}" onclick="savingsViewMode='month';renderSavings()">월별</button>
+      <button class="${savingsViewMode==='year'?'active':''}" onclick="savingsViewMode='year';renderSavings()">연간</button>
+    </div>
+  </div>`;
+
+  if (items.length === 0) {
+    el.innerHTML = modeHtml + `<div class="empty"><span class="empty-emoji">🐖</span><div class="empty-title">저축 항목을 추가해보세요</div></div>`;
+    return;
+  }
+
+  if (savingsViewMode === 'month') {
+    // 이번 달 합계
+    const monthTotal = items.reduce((s, item) => {
+      const log = getSavingsLog(item.id, year, month);
+      return s + (log ? log.amount : 0);
+    }, 0);
+    const targetTotal = items.reduce((s, item) => s + (item.target||0), 0);
+
+    let html = modeHtml;
+    // 요약 카드
+    html += `<div style="margin:0 20px 14px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
+      <div style="font-size:13px;opacity:.8;margin-bottom:6px;">${year}년 ${month}월 저축</div>
+      <div style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;">${fmt(monthTotal)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div>
+      ${targetTotal>0?`<div style="font-size:13px;opacity:.7;margin-top:6px;">목표 ${fmt(targetTotal)}원 · ${monthTotal>=targetTotal?'✅ 달성':''+Math.round(monthTotal/targetTotal*100)+'% 달성'}</div>`:''}
+    </div>`;
+
+    // 항목별
+    html += items.map(item => {
+      const log = getSavingsLog(item.id, year, month);
+      const amount = log ? log.amount : 0;
+      const target = item.target || 0;
+      const pct = target > 0 ? Math.min(100, Math.round(amount/target*100)) : null;
+      const cls = pct !== null ? (pct>=100?'':'') : '';
+      return `<div style="margin:0 20px 10px;background:var(--card);border-radius:16px;overflow:hidden;">
+        <div style="padding:14px 16px;display:flex;align-items:center;gap:12px;" onclick="openSavingsLogModal('${item.id}', ${year}, ${month})">
+          <div style="width:42px;height:42px;background:var(--primary-light);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${item.icon||'🐖'}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:15px;font-weight:700;">${escapeHtml(item.name)}</div>
+            ${log&&log.memo?`<div style="font-size:12px;color:var(--text-sub);">${escapeHtml(log.memo)}</div>`:''}
+            ${pct!==null?`<div style="margin-top:6px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=100?'var(--success)':'var(--primary)'};border-radius:3px;transition:width .4s;"></div></div>`:''}
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;color:${amount>0?'var(--primary)':'var(--text-placeholder)'};">${amount>0?fmt(amount)+'원':'미입력'}</div>
+            ${target>0?`<div style="font-size:11px;color:var(--text-sub);">목표 ${fmt(target)}원</div>`:''}
+          </div>
+          <span style="color:var(--text-placeholder);font-size:18px;">›</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = html;
+
+  } else {
+    // 연간 뷰
+    const yearTotal = items.reduce((s, item) => s + getYearTotal(item.id, year), 0);
+    let html = modeHtml;
+    html += `<div style="margin:0 20px 14px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
+      <div style="font-size:13px;opacity:.8;margin-bottom:6px;">${year}년 연간 저축</div>
+      <div style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;">${fmt(yearTotal)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div>
+    </div>`;
+
+    // 항목별 연간 표
+    html += items.map(item => {
+      const annualTotal = getYearTotal(item.id, year);
+      const annualTarget = (item.target||0) * 12;
+      const months = Array.from({length:12},(_,i)=>i+1);
+      const rows = months.map(m => {
+        const log = getSavingsLog(item.id, year, m);
+        const amt = log ? log.amount : 0;
+        const isCurrent = m === month;
+        return `<div style="display:flex;align-items:center;padding:9px 0;${m>1?'border-top:1px solid var(--border);':''}" onclick="openSavingsLogModal('${item.id}', ${year}, ${m})">
+          <div style="width:36px;font-size:13px;font-weight:${isCurrent?'800':'400'};color:${isCurrent?'var(--primary)':'var(--text-sub)'};">${m}월</div>
+          <div style="flex:1;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:${amt>0?'var(--text)':'var(--text-placeholder)'};">${amt>0?fmt(amt)+'원':'—'}</div>
+          ${log&&log.memo?`<div style="font-size:11px;color:var(--text-sub);">${escapeHtml(log.memo)}</div>`:''}
+          <span style="color:var(--text-placeholder);font-size:16px;">›</span>
+        </div>`;
+      }).join('');
+      return `<div style="margin:0 20px 12px;background:var(--card);border-radius:16px;overflow:hidden;">
+        <div style="padding:12px 16px;background:var(--bg);display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">${item.icon||'🐖'}</span>
+          <div style="flex:1;font-weight:700;">${escapeHtml(item.name)}</div>
+          <div style="text-align:right;"><div style="font-weight:800;font-size:15px;color:var(--primary);font-variant-numeric:tabular-nums;">${fmt(annualTotal)}원</div>${annualTarget>0?`<div style="font-size:11px;color:var(--text-sub);">연목표 ${fmt(annualTarget)}원</div>`:''}</div>
+          <button onclick="event.stopPropagation();openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-sub);font-size:18px;">⋯</button>
+        </div>
+        <div style="padding:0 16px;">${rows}</div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = html;
+  }
+}
+
+function openSavingsItemModal(id) {
+  const ICONS = SAV_ICONS;
+  if (id) {
+    const item = (state.savingsItems||[]).find(x=>x.id===id);
+    if (!item) return;
+    savingsItemModal = {editingId:id, icon:item.icon||'🐖'};
+    document.getElementById('savings-item-title').textContent = '저축 항목 수정';
+    document.getElementById('sav-item-name').value = item.name;
+    document.getElementById('sav-item-target').value = item.target||'';
+    document.getElementById('sav-item-delete-btn').style.display = 'block';
+  } else {
+    savingsItemModal = {editingId:null, icon:'🐖'};
+    document.getElementById('savings-item-title').textContent = '저축 항목 추가';
+    document.getElementById('sav-item-name').value = '';
+    document.getElementById('sav-item-target').value = '';
+    document.getElementById('sav-item-delete-btn').style.display = 'none';
+  }
+  document.getElementById('sav-item-icon-grid').innerHTML = ICONS.map(ico =>
+    `<button class="category-btn ${savingsItemModal.icon===ico?'active':''}" onclick="savingsItemModal.icon='${ico}';document.getElementById('sav-item-icon-grid').querySelectorAll('.category-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')"><span class="emoji">${ico}</span></button>`
+  ).join('');
+  openModal('savings-item-modal');
+}
+function closeSavingsItemModal() { document.getElementById('savings-item-modal').classList.remove('active'); }
+function saveSavingsItem() {
+  const name = document.getElementById('sav-item-name').value.trim();
+  const target = +document.getElementById('sav-item-target').value||0;
+  if (!name) { alert('항목명을 입력하세요'); return; }
+  state.savingsItems = state.savingsItems||[];
+  if (savingsItemModal.editingId) {
+    const item = state.savingsItems.find(x=>x.id===savingsItemModal.editingId);
+    if (item) Object.assign(item, {name, icon:savingsItemModal.icon, target, updatedAt:Date.now()});
+  } else {
+    state.savingsItems.push({id:'sav_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name, icon:savingsItemModal.icon, target, createdAt:Date.now()});
+  }
+  save(); closeSavingsItemModal(); renderSavings();
+}
+function deleteSavingsItem() {
+  if (!confirm('삭제할까요? 관련 입력 내역도 모두 삭제됩니다.')) return;
+  const id = savingsItemModal.editingId;
+  state.savingsItems = state.savingsItems.filter(x=>x.id!==id);
+  state.savingsLogs = (state.savingsLogs||[]).filter(l=>!l.key.startsWith(id+'-'));
+  save(); closeSavingsItemModal(); renderSavings();
+}
+
+function openSavingsLogModal(itemId, year, month) {
+  const item = (state.savingsItems||[]).find(x=>x.id===itemId);
+  if (!item) return;
+  const log = getSavingsLog(itemId, year, month);
+  savingsLogModal = {editingId:log?log.id:null, itemId};
+  document.getElementById('savings-log-title').textContent = `${item.icon||'🐖'} ${item.name}`;
+  document.getElementById('savings-log-period').textContent = `${year}년 ${month}월`;
+  document.getElementById('sav-log-amount').value = log?log.amount:'';
+  document.getElementById('sav-log-memo').value = log?log.memo||'':'';
+  document.getElementById('sav-log-delete-btn').style.display = log?'block':'none';
+  openModal('savings-log-modal');
+}
+function closeSavingsLogModal() { document.getElementById('savings-log-modal').classList.remove('active'); }
+function saveSavingsLog() {
+  const amount = +document.getElementById('sav-log-amount').value||0;
+  const memo = document.getElementById('sav-log-memo').value.trim();
+  const periodText = document.getElementById('savings-log-period').textContent;
+  const [year, month] = periodText.replace('년 ','년').replace('월','').split('년').map(s=>parseInt(s.trim()));
+  if (!amount) { alert('금액을 입력하세요'); return; }
+  state.savingsLogs = state.savingsLogs||[];
+  const key = getSavingsLogKey(savingsLogModal.itemId, year, month);
+  const existing = state.savingsLogs.find(l=>l.key===key);
+  if (existing) { existing.amount=amount; existing.memo=memo; existing.updatedAt=Date.now(); }
+  else { state.savingsLogs.push({id:'savlog_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), key, itemId:savingsLogModal.itemId, year, month, amount, memo, createdAt:Date.now()}); }
+  save(); closeSavingsLogModal(); renderSavings();
+}
+function deleteSavingsLog() {
+  if (!confirm('이 달 입력을 삭제할까요?')) return;
+  const periodText = document.getElementById('savings-log-period').textContent;
+  const [year, month] = periodText.replace('년 ','년').replace('월','').split('년').map(s=>parseInt(s.trim()));
+  const key = getSavingsLogKey(savingsLogModal.itemId, year, month);
+  state.savingsLogs = (state.savingsLogs||[]).filter(l=>l.key!==key);
+  save(); closeSavingsLogModal(); renderSavings();
 }
 
 // ========== EXPORT ==========
