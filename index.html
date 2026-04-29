@@ -372,7 +372,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div style="text-align:center;"><div style="font-size:12px;color:var(--text-placeholder);margin-top:12px;">회원가입 후 모든 기능을 사용할 수 있어요</div></div>
   </div>
 </div>
-<!-- PIN OVERLAY -->
+<!-- PASSWORD RESET OVERLAY -->
+<div class="login-overlay" id="reset-overlay">
+  <div class="login-logo">🔐</div>
+  <div class="login-title">새 비밀번호 설정</div>
+  <div class="login-sub">새로운 비밀번호를 입력해주세요</div>
+  <div class="login-form">
+    <div class="login-msg" id="reset-msg"></div>
+    <input type="password" class="form-input" id="reset-password" placeholder="새 비밀번호 (6자 이상)" style="margin-bottom:10px;">
+    <input type="password" class="form-input" id="reset-password-confirm" placeholder="비밀번호 확인" style="margin-bottom:10px;">
+    <button class="btn-primary" onclick="handlePasswordReset()">비밀번호 변경</button>
+  </div>
+</div>
 <div class="pin-overlay" id="pin-overlay">
   <div class="pin-logo">🔒</div>
   <div class="pin-title" id="pin-title">PIN 입력</div>
@@ -1143,6 +1154,16 @@ function scheduleSync() {
 // ========== AUTH ==========
 async function initAuth() {
   if (!sb) { showLoginOverlay(); startApp(); return; }
+  // 비밀번호 재설정 링크 감지
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery')) {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (session) {
+      document.getElementById('reset-overlay').classList.add('active');
+      window.location.hash = '';
+      return;
+    }
+  }
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
     authUser = session.user;
@@ -1225,6 +1246,30 @@ async function handleForgotPassword() {
   } catch(e) {
     msg.style.color = 'var(--danger)';
     msg.textContent = e.message || '전송 실패';
+  }
+}
+async function handlePasswordReset() {
+  const pw = document.getElementById('reset-password').value;
+  const pw2 = document.getElementById('reset-password-confirm').value;
+  const msg = document.getElementById('reset-msg');
+  msg.textContent = '';
+  if (pw.length < 6) { msg.textContent = '비밀번호는 6자 이상'; return; }
+  if (pw !== pw2) { msg.textContent = '비밀번호가 일치하지 않아요'; return; }
+  const btn = document.querySelector('#reset-overlay .btn-primary');
+  btn.disabled = true; btn.textContent = '변경 중...';
+  try {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) throw error;
+    msg.style.color = 'var(--primary)';
+    msg.textContent = '✓ 비밀번호가 변경됐어요';
+    setTimeout(() => {
+      document.getElementById('reset-overlay').classList.remove('active');
+      showLoginOverlay();
+    }, 1500);
+  } catch(e) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = e.message || '변경 실패';
+    btn.disabled = false; btn.textContent = '비밀번호 변경';
   }
 }
 async function signOut() {
