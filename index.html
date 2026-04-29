@@ -3833,6 +3833,20 @@ function toggleSavingsSortMode() {
   savingsSortMode = !savingsSortMode;
   renderSavings();
 }
+function quickSavingsComplete(itemId, year, month, target) {
+  state.savingsLogs = state.savingsLogs || [];
+  const key = getSavingsLogKey(itemId, year, month);
+  const existing = state.savingsLogs.find(l => l.key === key);
+  // 이미 완납이면 취소(삭제), 아니면 목표금액으로 완납
+  if (existing && existing.amount >= target) {
+    if (!confirm('완납을 취소할까요?')) return;
+    state.savingsLogs = state.savingsLogs.filter(l => l.key !== key);
+  } else {
+    if (existing) { existing.amount = target; existing.updatedAt = Date.now(); }
+    else { state.savingsLogs.push({id:'savlog_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), key, itemId, year, month, amount:target, memo:'완납', createdAt:Date.now()}); }
+  }
+  save(); renderSavings();
+}
 function getSavingsLogKey(itemId, year, month) {
   return `${itemId}-${year}-${String(month).padStart(2,'0')}`;
 }
@@ -3935,6 +3949,7 @@ function renderSavings() {
             <div style="font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;color:${amount>0?'var(--primary)':'var(--text-placeholder)'};">${amount>0?fmt(amount)+'원':'미입력'}</div>
             ${target>0?`<div style="font-size:11px;color:var(--text-sub);">목표 ${fmt(target)}원</div>`:''}
           </div>
+          ${target>0?`<button onclick="quickSavingsComplete('${item.id}', ${year}, ${month}, ${target})" style="background:${amount>=target?'var(--success)':'var(--border)'};color:${amount>=target?'white':'var(--text-sub)'};border:none;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;flex-shrink:0;" title="완납">${amount>=target?'✓완납':'완납'}</button>`:''}
           <button onclick="openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-placeholder);font-size:18px;padding:4px;">✎</button>
         </div>
       </div>`;
