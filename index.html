@@ -419,7 +419,6 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <button class="tab-btn active" data-budget-sub="history">내역</button>
       <button class="tab-btn" data-budget-sub="assets">자산</button>
       <button class="tab-btn" data-budget-sub="monthly">정기관리</button>
-      <button class="tab-btn" data-budget-sub="paydates">결제일</button>
       <button class="tab-btn" data-budget-sub="stats">통계</button>
     </div>
     <div id="budget-sub-history" class="budget-sub active">
@@ -445,10 +444,6 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div id="budget-sub-stats" class="budget-sub">
       <div class="tab-group" style="padding-top:0;"><button class="tab-btn active" data-stat="month">이번 달</button><button class="tab-btn" data-stat="trend">연별통계</button><button class="tab-btn" data-stat="cashflow">현금흐름</button></div>
       <div id="stats-content"></div>
-    </div>
-    <div id="budget-sub-paydates" class="budget-sub">
-      <div id="paydates-content"></div>
-      <div style="padding:4px 20px 20px;"><button class="btn-primary" onclick="openRecurringEditModal()">+ 고정지출 추가</button></div>
     </div>
   </div>
   <!-- TODOS -->
@@ -1553,7 +1548,6 @@ function renderBudgetPage() {
   if (budgetSub === 'history') renderHistory();
   else if (budgetSub === 'assets') renderAssets();
   else if (budgetSub === 'monthly') renderMonthly();
-  else if (budgetSub === 'paydates') renderPayDates();
   else if (budgetSub === 'stats') renderStats();
   else if (budgetSub === 'plan') renderBudget();
 }
