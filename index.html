@@ -4485,20 +4485,44 @@ function quickSavingsComplete(itemId, year, month, target) {
   state.savingsLogs = state.savingsLogs || [];
   const key = getSavingsLogKey(itemId, year, month);
   const existing = state.savingsLogs.find(l => l.key === key);
+  const item = (state.savingsItems||[]).find(x=>x.id===itemId);
+
+  // 보험 자산 헬퍼
+  const getInsAsset = () => {
+    if (!item) return null;
+    const assetId = item.toAssetId;
+    const a = assetId ? getAsset(assetId) : null;
+    return (a && a.type==='보험' && a.insurance) ? a : null;
+  };
+
   if (existing && existing.amount >= target) {
     if (!confirm('완납을 취소할까요?')) return;
     if (existing.transferId) state.transactions = state.transactions.filter(t=>t.id!==existing.transferId);
+    // 보험 회차 -1
+    const insA = getInsAsset();
+    if (insA) {
+      insA.insurance.payCount = Math.max(0, (Number(insA.insurance.payCount)||0) - 1);
+      insA.insurance.totalPaid = Math.max(0, (Number(insA.insurance.totalPaid)||0) - target);
+      insA.updatedAt = Date.now();
+    }
     state.savingsLogs = state.savingsLogs.filter(l => l.key !== key);
   } else {
-    // 기존 이체 삭제
+    const wasNew = !existing;
     if (existing && existing.transferId) state.transactions = state.transactions.filter(t=>t.id!==existing.transferId);
-    // 이체 자동생성
-    const item = (state.savingsItems||[]).find(x=>x.id===itemId);
     let transferId = null;
     if (item && (item.fromAssetId || item.toAssetId)) {
       const dateStr = year+'-'+String(month).padStart(2,'0')+'-01';
       transferId = 't_sav_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
       state.transactions.push({id:transferId, type:'transfer', amount:target, date:dateStr, fromAccountId:item.fromAssetId||null, toAccountId:item.toAssetId||null, memo:`[저축] ${item.name}`, category:'저축', autoSavings:true, createdAt:Date.now()});
+    }
+    // 보험 회차 +1 (신규 납부 시만)
+    if (wasNew) {
+      const insA = getInsAsset();
+      if (insA) {
+        insA.insurance.payCount = (Number(insA.insurance.payCount)||0) + 1;
+        insA.insurance.totalPaid = (Number(insA.insurance.totalPaid)||0) + target;
+        insA.updatedAt = Date.now();
+      }
     }
     if (existing) { existing.amount=target; existing.memo='완납'; existing.transferId=transferId; existing.updatedAt=Date.now(); }
     else { state.savingsLogs.push({id:'savlog_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), key, itemId, year, month, amount:target, memo:'완납', transferId, createdAt:Date.now()}); }
