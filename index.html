@@ -1478,8 +1478,18 @@ function openPage(name) {
 }
 function updateFab() {
   const fab = document.getElementById('main-fab');
-  const showOn = ['home','budget','records','bookmarks','goals'];
-  fab.style.display = showOn.includes(currentPage) ? 'flex' : 'none';
+  // 가계부: 내역 탭에서만 표시
+  if (currentPage === 'budget') {
+    fab.style.display = budgetSub === 'history' ? 'flex' : 'none';
+    return;
+  }
+  // 기록: 각 서브탭에서 표시
+  if (currentPage === 'records') {
+    fab.style.display = 'flex';
+    return;
+  }
+  // 홈에서만 표시
+  fab.style.display = currentPage === 'home' ? 'flex' : 'none';
 }
 function handleFabClick() {
   if (currentPage === 'records') {
@@ -4155,8 +4165,8 @@ function savingsMonthSection(savItems, year, month) {
         <div style="flex:1;min-width:0;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
           <div style="font-size:14px;font-weight:700;">${escapeHtml(item.name)}</div>
           ${(item.fromAssetId||item.toAssetId)?`<div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${item.fromAssetId?(getAsset(item.fromAssetId)||{}).name||'':''} ${item.fromAssetId&&item.toAssetId?'→':''} ${item.toAssetId?(getAsset(item.toAssetId)||{}).name||'':''}</div>`:''}
+          ${(()=>{const ta=item.toAssetId?getAsset(item.toAssetId):null;return ta&&ta.type==='보험'&&ta.insurance?`<div style="font-size:11px;color:var(--primary);margin-top:2px;font-weight:600;">${Number(ta.insurance.payCount)||0}회차 납입 · 총 ${fmt(Number(ta.insurance.totalPaid)||0)}원</div>`:'';})()}
           ${pct!==null?`<div style="margin-top:5px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=100?'var(--success)':'var(--primary)'};border-radius:2px;"></div></div>`:''}
-        </div>
         <div style="text-align:right;font-variant-numeric:tabular-nums;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
           <div style="font-weight:800;font-size:15px;color:${amount>0?'var(--primary)':'var(--text-placeholder)'};">${amount>0?fmt(amount)+'원':'미입력'}</div>
           ${target>0?`<div style="font-size:11px;color:var(--text-sub);">목표 ${fmt(target)}원</div>`:''}
@@ -4470,30 +4480,38 @@ function saveSavingsLog() {
   state.savingsLogs = state.savingsLogs||[];
   const key = getSavingsLogKey(savingsLogModal.itemId, year, month);
   const existing = state.savingsLogs.find(l=>l.key===key);
+  const wasNew = !existing;
 
-  // 기존 로그의 이체 거래 삭제
-  if (existing && existing.transferId) {
-    state.transactions = state.transactions.filter(t => t.id !== existing.transferId);
-  }
+  // 기존 이체 삭제
+  if (existing && existing.transferId) state.transactions = state.transactions.filter(t=>t.id!==existing.transferId);
 
   let transferId = null;
-  // 자산 연결된 경우 이체 자동생성
   const item = (state.savingsItems||[]).find(x=>x.id===savingsLogModal.itemId);
   if (item && (item.fromAssetId || item.toAssetId)) {
     const dateStr = year+'-'+String(month).padStart(2,'0')+'-01';
     transferId = 't_sav_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
     state.transactions.push({
-      id: transferId,
-      type: 'transfer',
-      amount,
-      date: dateStr,
-      fromAccountId: item.fromAssetId||null,
-      toAccountId: item.toAssetId||null,
-      memo: `[저축] ${item.name}${memo?' · '+memo:''}`,
-      category: '저축',
-      autoSavings: true,
-      createdAt: Date.now()
+      id:transferId, type:'transfer', amount, date:dateStr,
+      fromAccountId:item.fromAssetId||null, toAccountId:item.toAssetId||null,
+      memo:`[저축] ${item.name}${memo?' · '+memo:''}`, category:'저축', autoSavings:true, createdAt:Date.now()
     });
+    // 보험 자산이면 회차 +1 + 총납입금액 업데이트
+    if (item.toAssetId) {
+      const toAsset = getAsset(item.toAssetId);
+      if (toAsset && toAsset.type === '보험' && toAsset.insurance) {
+        if (wasNew) {
+          toAsset.insurance.payCount = (Number(toAsset.insurance.payCount)||0) + 1;
+        }
+        const prevExtra = Number(toAsset.insurance.extraPaid)||0;
+        if (wasNew) {
+          toAsset.insurance.totalPaid = (Number(toAsset.insurance.totalPaid)||0) + amount;
+        } else if (existing) {
+          // 금액 수정 시 차액 반영
+          toAsset.insurance.totalPaid = (Number(toAsset.insurance.totalPaid)||0) - existing.amount + amount;
+        }
+        toAsset.updatedAt = Date.now();
+      }
+    }
   }
 
   if (existing) {
@@ -4509,8 +4527,19 @@ function deleteSavingsLog() {
   const [year, month] = periodText.replace('년 ','년').replace('월','').split('년').map(s=>parseInt(s.trim()));
   const key = getSavingsLogKey(savingsLogModal.itemId, year, month);
   const log = (state.savingsLogs||[]).find(l=>l.key===key);
-  // 연결된 이체 거래도 삭제
-  if (log && log.transferId) state.transactions = state.transactions.filter(t=>t.id!==log.transferId);
+  if (log) {
+    if (log.transferId) state.transactions = state.transactions.filter(t=>t.id!==log.transferId);
+    // 보험 자산 회차 -1
+    const item = (state.savingsItems||[]).find(x=>x.id===savingsLogModal.itemId);
+    if (item && item.toAssetId) {
+      const toAsset = getAsset(item.toAssetId);
+      if (toAsset && toAsset.type === '보험' && toAsset.insurance) {
+        toAsset.insurance.payCount = Math.max(0, (Number(toAsset.insurance.payCount)||0) - 1);
+        toAsset.insurance.totalPaid = Math.max(0, (Number(toAsset.insurance.totalPaid)||0) - log.amount);
+        toAsset.updatedAt = Date.now();
+      }
+    }
+  }
   state.savingsLogs = (state.savingsLogs||[]).filter(l=>l.key!==key);
   save(); closeSavingsLogModal(); renderMonthly();
 }
