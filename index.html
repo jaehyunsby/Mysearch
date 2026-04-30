@@ -1885,10 +1885,10 @@ function renderFixedExpenses() {
   const listEl = document.getElementById('fixed-list');
   if (!summaryEl || !listEl) return;
   const items = state.recurring || [];
-  const expenses = items.filter(r => r.type === 'expense');
+  const expenses = items.filter(r => r.type === 'expense'); // 비활성도 표시
   const incomes = items.filter(r => r.type === 'income');
-  const activeExp = expenses.filter(r => r.active).reduce((s,r) => s+r.amount, 0);
-  const activeInc = incomes.filter(r => r.active).reduce((s,r) => s+r.amount, 0);
+  const activeExp = expenses.filter(r=>r.active).reduce((s,r) => s+r.amount, 0);
+  const activeInc = incomes.filter(r=>r.active).reduce((s,r) => s+r.amount, 0);
   const monthlyNet = activeInc - activeExp;
   summaryEl.innerHTML = `<div style="margin:0 20px 14px;"><div style="background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:22px 20px;color:white;"><div style="font-size:13px;opacity:.8;margin-bottom:6px;">이번 달 고정지출</div><div style="font-size:28px;font-weight:800;margin-bottom:16px;font-variant-numeric:tabular-nums;">-${fmt(activeExp)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div><div style="display:flex;gap:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.15);"><div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">연간</div><div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;">-${fmt(activeExp*12)}원</div></div><div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">고정수입</div><div style="font-size:15px;font-weight:700;color:#4ADE80;">+${fmt(activeInc)}원</div></div><div style="flex:1;"><div style="font-size:12px;opacity:.75;margin-bottom:3px;">실 순지출</div><div style="font-size:15px;font-weight:700;color:${monthlyNet>=0?'#4ADE80':'#F87171'};">${monthlyNet>=0?'+':''}${fmt(monthlyNet)}원</div></div></div></div></div>`;
   if (items.length === 0) { listEl.innerHTML = `<div class="empty"><span class="empty-emoji">🔁</span><div class="empty-title">고정지출이 없어요</div></div>`; return; }
@@ -3821,7 +3821,8 @@ function renderMonthly() {
   if (!el) return;
 
   const items = state.recurring || [];
-  const allExpenses = items.filter(r => r.type === 'expense' && r.active);
+  const allExpenses = items.filter(r => r.type === 'expense'); // 비활성도 표시 (dimmed)
+  const allIncomes = items.filter(r => r.type === 'income'); // 고정수입은 참고용
   const savItems = state.savingsItems || [];
   // 수입: 실제 거래내역 기반
   const txs = txForMonth(currentMonth);
@@ -3846,7 +3847,7 @@ function renderMonthly() {
 }
 
 function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, month, toggleHtml) {
-  const totalExp = expenses.reduce((s,r) => s+r.amount, 0);
+  const totalExp = expenses.filter(r=>r.active).reduce((s,r) => s+r.amount, 0);
   const totalSavActual = savItems.reduce((s, item) => {
     const log = getSavingsLog(item.id, year, month);
     return s + (log ? log.amount : 0); // 실제 입력된 금액만
