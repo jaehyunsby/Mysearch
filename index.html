@@ -4703,22 +4703,33 @@ function onSettleAmountInput() {
   if (!cardId) return;
   const actual = +document.getElementById('settle-amount').value || 0;
   const txs = txForMonth(currentMonth);
-  const recorded = txs.filter(t => t.type==='expense' && t.accountId===cardId)
-    .reduce((s,t)=>s+t.amount,0);
-  const diff = recorded - actual;
+
+  const fixedPaid = (state.recurring||[]).filter(r=>r.type==='expense'&&r.active&&r.accountId===cardId).reduce((s,r)=>{
+    const log=getRecLog(r.id,currentMonth.getFullYear(),currentMonth.getMonth()+1);
+    return s+(log&&log.paid?log.amount:0);
+  },0);
+  const cardMiscExp = txs.filter(t=>t.type==='expense'&&t.accountId===cardId&&!t.autoRecurring).reduce((s,t)=>s+t.amount,0);
+  const diff = actual - fixedPaid - cardMiscExp;
+
   const infoEl = document.getElementById('settle-diff-info');
   const textEl = document.getElementById('settle-diff-text');
-  if (actual > 0 && diff !== 0) {
+  if (actual > 0) {
     infoEl.style.display = 'block';
+    let lines = [`고정지출 납부: ${fmt(fixedPaid)}원`, `기록된 기타지출: ${fmt(cardMiscExp)}원`];
     if (diff > 0) {
+      infoEl.style.background = '#FFF3CD';
+      textEl.style.color = '#856404';
+      lines.push(`→ 미기록 기타지출 ${fmt(diff)}원 자동 추가`);
+    } else if (diff < 0) {
       infoEl.style.background = '#E6F7EF';
       textEl.style.color = 'var(--success)';
-      textEl.textContent = `💰 카드 혜택 ${fmt(diff)}원 → 수입으로 자동 처리`;
+      lines.push(`→ 카드 혜택 ${fmt(Math.abs(diff))}원`);
     } else {
-      infoEl.style.background = '#FFF0F0';
-      textEl.style.color = 'var(--danger)';
-      textEl.textContent = `⚠️ 기록보다 ${fmt(Math.abs(diff))}원 더 나감 → 지출로 자동 처리`;
+      infoEl.style.background = 'var(--bg)';
+      textEl.style.color = 'var(--text-sub)';
+      lines.push('→ 딱 맞아요 ✓');
     }
+    textEl.innerHTML = lines.join('<br>');
   } else {
     infoEl.style.display = 'none';
   }
@@ -4735,13 +4746,27 @@ function executeCardSettle() {
   if (!date) { alert('정산일을 입력하세요'); return; }
 
   const txs = txForMonth(currentMonth);
-  const recorded = txs.filter(t => t.type==='expense' && t.accountId===cardId)
-    .reduce((s,t)=>s+t.amount,0);
-  const diff = recorded - actual;
   const cardName = (getAsset(cardId)||{}).name||'카드';
   const fromName = (getAsset(fromId)||{}).name||'계좌';
 
-  // 이체: 계좌 → 카드 (실결제금만)
+  // 이번달 해당 카드로 납부완료된 고정지출 합계
+  const fixedPaid = (state.recurring||[])
+    .filter(r => r.type==='expense' && r.active)
+    .reduce((s,r) => {
+      const log = getRecLog(r.id, currentMonth.getFullYear(), currentMonth.getMonth()+1);
+      const isCardItem = r.accountId === cardId || r.payName;
+      return s + (log && log.paid && r.accountId === cardId ? log.amount : 0);
+    }, 0);
+
+  // 카드 일반 지출 (고정지출 납부로 생성된 거래 제외)
+  const cardMiscExp = txs.filter(t =>
+    t.type==='expense' && t.accountId===cardId && !t.autoRecurring
+  ).reduce((s,t)=>s+t.amount,0);
+
+  // 차액 = 실결제금 - 고정납부 - 기록된 기타지출
+  const diff = actual - fixedPaid - cardMiscExp;
+
+  // 이체: 계좌 → 카드 (실결제금)
   state.transactions.push({
     id:'t_settle_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
     type:'transfer', amount:actual, date,
@@ -4750,11 +4775,24 @@ function executeCardSettle() {
     createdAt:Date.now()
   });
 
-  // 차액은 표기만 (거래 미생성)
-  const diffMsg = diff > 0 ? `\n💰 카드 혜택 ${fmt(diff)}원` : diff < 0 ? `\n⚠️ 기록 외 지출 ${fmt(Math.abs(diff))}원` : '';
+  // 차액이 양수면 → 미기록 카드 지출로 추가
+  if (diff > 0) {
+    state.transactions.push({
+      id:'t_cardmisc_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      type:'expense', amount:diff, date,
+      accountId:cardId,
+      memo:`${cardName} 기타 지출`, category:'기타',
+      createdAt:Date.now()
+    });
+  }
 
   save(); closeCardSettleModal(); render();
-  alert(`✓ 정산 완료\n${fromName} → ${cardName} ${fmt(actual)}원${diffMsg}`);
+  const msg = [`${fromName} → ${cardName} ${fmt(actual)}원 이체`];
+  if (fixedPaid > 0) msg.push(`고정지출 ${fmt(fixedPaid)}원`);
+  if (cardMiscExp > 0) msg.push(`기록된 지출 ${fmt(cardMiscExp)}원`);
+  if (diff > 0) msg.push(`미기록 기타지출 ${fmt(diff)}원 추가`);
+  else if (diff < 0) msg.push(`💰 카드 혜택 ${fmt(Math.abs(diff))}원`);
+  alert('✓ 정산 완료\n' + msg.join('\n'));
 }
 
 // ========== EXPORT ==========
