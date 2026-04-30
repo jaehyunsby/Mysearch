@@ -418,9 +418,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="tab-group">
       <button class="tab-btn active" data-budget-sub="history">내역</button>
       <button class="tab-btn" data-budget-sub="assets">자산</button>
-      <button class="tab-btn" data-budget-sub="fixed">고정지출</button>
+      <button class="tab-btn" data-budget-sub="monthly">정기관리</button>
       <button class="tab-btn" data-budget-sub="paydates">결제일</button>
-      <button class="tab-btn" data-budget-sub="savings">저축</button>
       <button class="tab-btn" data-budget-sub="stats">통계</button>
     </div>
     <div id="budget-sub-history" class="budget-sub active">
@@ -440,17 +439,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button id="asset-sort-btn" onclick="toggleAssetSortMode()" style="padding:16px 18px;background:var(--bg);border:1.5px solid var(--border-line);border-radius:14px;font-size:14px;font-weight:600;color:var(--text-sub);">순서편집</button>
       </div>
     </div>
-    <div id="budget-sub-fixed" class="budget-sub">
-      <div id="fixed-summary"></div>
-      <div id="fixed-list"></div>
-      <div style="padding:4px 20px 20px;"><button class="btn-primary" onclick="openRecurringEditModal()">+ 고정지출 추가</button></div>
-    </div>
-    <div id="budget-sub-savings" class="budget-sub">
-      <div id="savings-content"></div>
-      <div style="padding:4px 20px 20px;"><button class="btn-primary" onclick="openSavingsItemModal()">+ 저축 항목 추가</button></div>
+    <div id="budget-sub-monthly" class="budget-sub">
+      <div id="monthly-content"></div>
     </div>
     <div id="budget-sub-stats" class="budget-sub">
-      <div class="tab-group" style="padding-top:0;"><button class="tab-btn active" data-stat="month">이번 달</button><button class="tab-btn" data-stat="trend">월별 추이</button></div>
+      <div class="tab-group" style="padding-top:0;"><button class="tab-btn active" data-stat="month">이번 달</button><button class="tab-btn" data-stat="trend">월별 추이</button><button class="tab-btn" data-stat="cashflow">현금흐름</button></div>
       <div id="stats-content"></div>
     </div>
     <div id="budget-sub-paydates" class="budget-sub">
@@ -1529,9 +1522,8 @@ function renderBudgetPage() {
   if (lbl) lbl.textContent = monthLabel(currentMonth);
   if (budgetSub === 'history') renderHistory();
   else if (budgetSub === 'assets') renderAssets();
-  else if (budgetSub === 'fixed') renderFixedExpenses();
+  else if (budgetSub === 'monthly') renderMonthly();
   else if (budgetSub === 'paydates') renderPayDates();
-  else if (budgetSub === 'savings') renderSavings();
   else if (budgetSub === 'stats') renderStats();
   else if (budgetSub === 'plan') renderBudget();
 }
@@ -1665,9 +1657,9 @@ function renderStats() {
         return `<div class="stat-item"><div class="stat-color" style="background:${info.color};"></div><span class="stat-emoji">${info.emoji}</span><div class="stat-label">${k}</div><div class="stat-value">${fmt(v)}원</div><div class="stat-percent">${pct}%</div></div>`;
       }).join('');
     }, 50);
+  } else if (statsTab === 'cashflow') {
+    renderCashFlow(content);
   } else {
-    const months = [];
-    const d = new Date(currentMonth);
     for (let i = 5; i >= 0; i--) { const m = new Date(d); m.setMonth(m.getMonth()-i); months.push(m); }
     const incomeData = months.map(m => txForMonth(m).filter(t => t.type === 'income').reduce((s,t) => s+t.amount, 0));
     const expenseData = months.map(m => txForMonth(m).filter(t => t.type === 'expense').reduce((s,t) => s+t.amount, 0));
@@ -1686,14 +1678,160 @@ function renderStats() {
   }
 }
 
-function renderBudget() {
-  const mk = monthKey(currentMonth);
-  const budget = getMonthlyBudget(mk);
-  document.getElementById('total-budget-input').value = budget.total || '';
-  document.getElementById('budget-editor').innerHTML = CATEGORIES.expense.map(c => {
-    const v = (budget.byCategory || {})[c.key] || '';
-    return `<div class="budget-edit-item"><span class="emoji">${c.emoji}</span><span class="name">${c.key}</span><input type="number" class="budget-input" value="${v}" placeholder="0" onchange="saveCatBudget('${c.key}', this.value)"><span style="font-size:13px;color:var(--text-sub);">원</span></div>`;
-  }).join('');
+function renderCashFlow(container) {
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth() + 1;
+  const txs = txForMonth(currentMonth);
+
+  // 수입
+  const incomes = txs.filter(t => t.type === 'income');
+  const totalIncome = incomes.reduce((s,t) => s+t.amount, 0);
+
+  // 고정지출
+  const fixedItems = (state.recurring||[]).filter(r => r.type==='expense' && r.active);
+  const totalFixed = fixedItems.reduce((s,r) => s+r.amount, 0);
+
+  // 저축
+  const savItems = state.savingsItems || [];
+  const totalSav = savItems.reduce((s,item) => {
+    const log = getSavingsLog(item.id, year, month);
+    return s + (log ? log.amount : (item.target||0));
+  }, 0);
+
+  // 실제 지출 (거래내역 기반)
+  const totalActualExp = txs.filter(t => t.type==='expense').reduce((s,t) => s+t.amount, 0);
+
+  // 잉여/부족
+  const surplus = totalIncome - totalFixed - totalSav;
+  const actual = totalIncome - totalActualExp;
+
+  // 계좌별 수입 그룹
+  const incByAccount = {};
+  incomes.forEach(t => {
+    const acc = t.accountId ? (getAsset(t.accountId)||{}).name||'기타' : '기타';
+    incByAccount[acc] = (incByAccount[acc]||0) + t.amount;
+  });
+  const incByCat = {};
+  incomes.forEach(t => { incByCat[t.category||'기타'] = (incByCat[t.category||'기타']||0) + t.amount; });
+
+  // 지출 그룹 (결제수단별)
+  const expByPay = {};
+  fixedItems.forEach(r => {
+    const key = r.payName || (r.payMethod==='카드'?'카드':r.payMethod==='현금'?'계좌':'기타');
+    expByPay[key] = (expByPay[key]||0) + r.amount;
+  });
+
+  // 지출 카테고리별
+  const expByCat = {};
+  txs.filter(t=>t.type==='expense').forEach(t => {
+    expByCat[t.category||'기타'] = (expByCat[t.category||'기타']||0) + t.amount;
+  });
+  const topCats = Object.entries(expByCat).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // SVG 플로우 다이어그램
+  const W = 360, H = 420;
+  const col1x = 20, col2x = 160, col3x = 300;
+
+  // 노드 높이 비율 계산 (총수입 대비)
+  const maxH = 200;
+  const scale = totalIncome > 0 ? maxH / totalIncome : 0;
+
+  // 수입 노드들
+  const incEntries = Object.entries(incByCat).sort((a,b)=>b[1]-a[1]);
+  let incY = 20;
+  const incNodes = incEntries.map(([k,v]) => {
+    const h = Math.max(24, Math.round(v * scale));
+    const node = {k, v, y:incY, h};
+    incY += h + 6;
+    return node;
+  });
+
+  // 가운데 - 총수입 노드
+  const midH = Math.max(40, Math.round(totalIncome * scale));
+  const midY = 20;
+  const fixedH = totalIncome > 0 ? Math.round((totalFixed/totalIncome)*midH) : 0;
+  const savH = totalIncome > 0 ? Math.round((totalSav/totalIncome)*midH) : 0;
+  const surplusH = midH - fixedH - savH;
+
+  // 오른쪽 - 지출/저축/잉여
+  const outNodes = [
+    {k:'💸 고정지출', v:totalFixed, color:'#F04452', h:fixedH, y:midY},
+    {k:'🐖 저축', v:totalSav, color:'#3182F6', h:savH, y:midY+fixedH+4},
+    {k:surplus>=0?'✨ 잉여':'⚠️ 부족', v:Math.abs(surplus), color:surplus>=0?'#00C471':'#FF8C00', h:Math.max(20,surplusH), y:midY+fixedH+savH+8},
+  ];
+
+  const svgLines = [];
+  // 수입 → 중앙 커넥터
+  incNodes.forEach(n => {
+    const x1=col1x+80, y1=n.y+n.h/2, x2=col2x, y2=midY+midH/2;
+    svgLines.push(`<path d="M${x1},${y1} C${x1+40},${y1} ${x2-40},${y2} ${x2},${y2}" stroke="${'#3182F6'}22" stroke-width="${Math.max(2,n.h*0.6)}" fill="none" opacity="0.7"/>`);
+  });
+  // 중앙 → 출력
+  outNodes.forEach(n => {
+    const x1=col2x+80, y1=midY+midH/2, x2=col3x, y2=n.y+n.h/2;
+    svgLines.push(`<path d="M${x1},${y1} C${x1+40},${y1} ${x2-40},${y2} ${x2},${y2}" stroke="${n.color}33" stroke-width="${Math.max(2,n.h*0.6)}" fill="none" opacity="0.7"/>`);
+  });
+
+  const svg = `<svg viewBox="0 0 ${W} ${Math.max(incY, midY+midH+80)}" xmlns="http://www.w3.org/2000/svg" style="width:100%;overflow:visible;">
+    ${svgLines.join('')}
+    <!-- 수입 노드 -->
+    ${incNodes.map(n=>`
+      <rect x="${col1x}" y="${n.y}" width="80" height="${n.h}" rx="8" fill="#3182F622"/>
+      <text x="${col1x+40}" y="${n.y+n.h/2+5}" text-anchor="middle" font-size="11" fill="var(--primary)" font-weight="600">${n.k}</text>
+      <text x="${col1x+40}" y="${n.y+n.h/2+17}" text-anchor="middle" font-size="10" fill="var(--primary)">${(n.v/10000).toFixed(0)}만</text>
+    `).join('')}
+    <!-- 중앙 노드 -->
+    <rect x="${col2x}" y="${midY}" width="80" height="${midH}" rx="8" fill="#1F293788"/>
+    <text x="${col2x+40}" y="${midY+midH/2-5}" text-anchor="middle" font-size="11" fill="white" font-weight="700">총수입</text>
+    <text x="${col2x+40}" y="${midY+midH/2+10}" text-anchor="middle" font-size="10" fill="white">${(totalIncome/10000).toFixed(0)}만원</text>
+    <!-- 출력 노드 -->
+    ${outNodes.filter(n=>n.v>0).map(n=>`
+      <rect x="${col3x}" y="${n.y}" width="80" height="${Math.max(20,n.h)}" rx="8" fill="${n.color}22"/>
+      <text x="${col3x+40}" y="${n.y+Math.max(20,n.h)/2-2}" text-anchor="middle" font-size="10" fill="${n.color}" font-weight="600">${n.k}</text>
+      <text x="${col3x+40}" y="${n.y+Math.max(20,n.h)/2+12}" text-anchor="middle" font-size="10" fill="${n.color}">${(n.v/10000).toFixed(0)}만</text>
+    `).join('')}
+  </svg>`;
+
+  // 요약 테이블
+  const rows = [
+    {label:'💰 총 수입', value:totalIncome, color:'var(--primary)', sign:'+'},
+    {label:'💸 고정지출', value:totalFixed, color:'var(--danger)', sign:'-'},
+    {label:'🐖 저축', value:totalSav, color:'#3182F6', sign:'-'},
+    {label:'✨ 잉여현금', value:surplus, color:surplus>=0?'var(--success)':'var(--danger)', sign:surplus>=0?'+':''},
+    {label:'📊 실제지출', value:totalActualExp, color:'var(--text-sub)', sign:'-'},
+    {label:'📈 실제잔액', value:actual, color:actual>=0?'var(--success)':'var(--danger)', sign:actual>=0?'+':''},
+  ];
+
+  const topCatHtml = topCats.length ? `
+    <div style="margin:0 20px 16px;background:var(--card);border-radius:16px;overflow:hidden;">
+      <div style="padding:12px 16px;background:var(--bg);font-size:13px;font-weight:700;">💸 지출 상위 카테고리</div>
+      ${topCats.map(([k,v])=>{
+        const info = getCategoryInfo('expense', k);
+        const pct = totalActualExp > 0 ? Math.round(v/totalActualExp*100) : 0;
+        return `<div style="padding:10px 16px;display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);">
+          <span style="font-size:20px;">${info.emoji}</span>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${k}</div>
+          <div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${info.color};border-radius:2px;"></div></div></div>
+          <div style="text-align:right;"><div style="font-weight:700;font-size:13px;color:var(--danger);">-${fmt(v)}원</div><div style="font-size:11px;color:var(--text-sub);">${pct}%</div></div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  container.innerHTML = `
+    <div style="padding:12px 20px 4px;font-size:13px;font-weight:700;color:var(--text-sub);">${year}년 ${month}월 현금흐름</div>
+    <div style="margin:0 20px 16px;padding:16px;background:var(--card);border-radius:16px;">
+      ${svg}
+    </div>
+    <div style="margin:0 20px 16px;background:var(--card);border-radius:16px;overflow:hidden;">
+      <div style="padding:12px 16px;background:var(--bg);font-size:13px;font-weight:700;">📋 현금흐름 요약</div>
+      ${rows.map((r,i)=>`
+        <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;${i>0?'border-top:1px solid var(--border);':''}${i===3||i===5?'background:var(--bg);':''}">
+          <span style="font-size:14px;font-weight:${i===3||i===5?'700':'500'};">${r.label}</span>
+          <span style="font-weight:800;font-size:15px;color:${r.color};font-variant-numeric:tabular-nums;">${r.sign}${fmt(Math.abs(r.value))}원</span>
+        </div>`).join('')}
+    </div>
+    ${topCatHtml}
+  `;
 }
 
 function renderSettings() {
@@ -3649,7 +3787,261 @@ function deleteSubscription() {
   save(); closeSubscriptionModal(); renderSubscriptions();
 }
 
-// ========== CATEGORY MANAGE ==========
+// ========== MONTHLY (통합: 고정수입/고정지출/저축) ==========
+let monthlySavingsSortMode = false;
+let monthlyViewMode = 'month'; // 'month' | 'year'
+
+function renderMonthly() {
+  const el = document.getElementById('monthly-content');
+  if (!el) return;
+
+  const items = state.recurring || [];
+  const allExpenses = items.filter(r => r.type === 'expense' && r.active);
+  const allIncomes = items.filter(r => r.type === 'income' && r.active);
+  const savItems = state.savingsItems || [];
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth() + 1;
+
+  // 뷰 토글
+  const toggleHtml = `<div style="display:flex;gap:8px;padding:0 20px 14px;">
+    <div class="segmented" style="flex:1;">
+      <button class="${monthlyViewMode==='month'?'active':''}" onclick="monthlyViewMode='month';renderMonthly()">월별</button>
+      <button class="${monthlyViewMode==='year'?'active':''}" onclick="monthlyViewMode='year';renderMonthly()">연간</button>
+    </div>
+  </div>`;
+
+  if (monthlyViewMode === 'month') {
+    renderMonthlyMonth(el, allIncomes, allExpenses, savItems, year, month, toggleHtml);
+  } else {
+    renderMonthlyYear(el, allIncomes, allExpenses, savItems, year, toggleHtml);
+  }
+}
+
+function renderMonthlyMonth(el, incomes, expenses, savItems, year, month, toggleHtml) {
+  const totalInc = incomes.reduce((s,r) => s+r.amount, 0);
+  const totalExp = expenses.reduce((s,r) => s+r.amount, 0);
+  const totalSav = savItems.reduce((s, item) => {
+    const log = getSavingsLog(item.id, year, month);
+    return s + (log ? log.amount : (item.target||0));
+  }, 0);
+  const disposable = totalInc - totalExp - totalSav;
+
+  let html = toggleHtml;
+
+  // 요약 카드
+  html += `<div style="margin:0 20px 16px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
+    <div style="font-size:13px;opacity:.8;margin-bottom:12px;">${year}년 ${month}월 월간 현황</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 고정수입</div>
+        <div style="font-size:17px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalInc)}원</div>
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출</div>
+        <div style="font-size:17px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExp)}원</div>
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 저축</div>
+        <div style="font-size:17px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">-${fmt(totalSav)}원</div>
+      </div>
+      <div style="background:rgba(255,255,255,.12);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.2);">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">✨ 가처분</div>
+        <div style="font-size:17px;font-weight:800;color:${disposable>=0?'#4ADE80':'#F87171'};font-variant-numeric:tabular-nums;">${disposable>=0?'+':''}${fmt(disposable)}원</div>
+      </div>
+    </div>
+  </div>`;
+
+  // 고정수입
+  html += sectionHeader('💰 고정수입', null, 'openRecurringEditModal()');
+  html += incomes.length
+    ? `<div class="tx-list" style="margin:0 20px 16px;">${incomes.map(r=>renderFixedItem(r)).join('')}</div>`
+    : emptyBox('고정수입을 추가해보세요');
+
+  // 고정지출
+  html += sectionHeader('💸 고정지출', null, 'openRecurringEditModal()');
+  const cardMap={}, cashMap={};
+  expenses.forEach(r => {
+    const key = r.payName||(r.payMethod==='카드'?'미지정 카드':r.payMethod==='현금'?'미지정 계좌':null);
+    if (!key) return;
+    if (r.payMethod==='카드') cardMap[key]=(cardMap[key]||0)+r.amount;
+    else if (r.payMethod==='현금') cashMap[key]=(cashMap[key]||0)+r.amount;
+  });
+  const ck=Object.keys(cardMap), ak=Object.keys(cashMap);
+  if (ck.length||ak.length) {
+    html += `<div style="margin:0 20px 10px;padding:12px 14px;background:var(--card);border-radius:14px;display:flex;flex-wrap:wrap;gap:8px;">`;
+    ck.forEach(k=>{html+=`<div style="flex:1;min-width:120px;"><div style="font-size:11px;color:var(--text-sub);">💳 ${k}</div><div style="font-weight:700;font-size:14px;color:var(--danger);">-${fmt(cardMap[k])}원</div></div>`;});
+    ak.forEach(k=>{html+=`<div style="flex:1;min-width:120px;"><div style="font-size:11px;color:var(--text-sub);">🏦 ${k}</div><div style="font-weight:700;font-size:14px;color:var(--danger);">-${fmt(cashMap[k])}원</div></div>`;});
+    html += `</div>`;
+  }
+  const rg=(list,label,emoji)=>list.length?`<div style="padding:2px 20px 6px;"><span style="font-size:11px;color:var(--text-sub);font-weight:600;">${emoji} ${label} · ${fmt(list.reduce((s,r)=>s+r.amount,0))}원</span></div><div class="tx-list" style="margin:0 20px 10px;">${list.map(r=>renderFixedItem(r)).join('')}</div>`:'';
+  const cardExp=expenses.filter(r=>r.payMethod==='카드'), cashExp=expenses.filter(r=>r.payMethod==='현금'), etcExp=expenses.filter(r=>!r.payMethod);
+  html += rg(cardExp,'카드','💳')+rg(cashExp,'현금/계좌','🏦')+rg(etcExp,'미분류','📋');
+  if (!expenses.length) html += emptyBox('고정지출을 추가해보세요');
+
+  // 저축
+  html += savingsMonthSection(savItems, year, month);
+  el.innerHTML = html;
+}
+
+function renderMonthlyYear(el, incomes, expenses, savItems, year, toggleHtml) {
+  const totalAnnualInc = incomes.reduce((s,r)=>s+r.amount,0)*12;
+  const totalAnnualExp = expenses.reduce((s,r)=>s+r.amount,0)*12;
+  const totalAnnualSavTarget = savItems.reduce((s,i)=>s+(i.target||0),0)*12;
+  const totalAnnualSavReal = Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>
+    s + savItems.reduce((ss,item)=>{const l=getSavingsLog(item.id,year,m);return ss+(l?l.amount:0);},0), 0);
+
+  let html = toggleHtml;
+
+  // 연간 요약 카드
+  html += `<div style="margin:0 20px 16px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
+    <div style="font-size:13px;opacity:.8;margin-bottom:12px;">${year}년 연간 현황</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 고정수입 (연)</div>
+        <div style="font-size:15px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalAnnualInc)}원</div>
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출 (연)</div>
+        <div style="font-size:15px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalAnnualExp)}원</div>
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 저축 목표 (연)</div>
+        <div style="font-size:15px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">${fmt(totalAnnualSavTarget)}원</div>
+      </div>
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 실제 저축 (연)</div>
+        <div style="font-size:15px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">${fmt(totalAnnualSavReal)}원</div>
+      </div>
+    </div>
+  </div>`;
+
+  // 고정지출 연간 표
+  html += sectionHeader('💸 고정지출 연간', null, 'openRecurringEditModal()');
+  if (expenses.length === 0) {
+    html += emptyBox('고정지출을 추가해보세요');
+  } else {
+    const months = Array.from({length:12},(_,i)=>i+1);
+    const curMonth = currentMonth.getMonth()+1;
+    html += `<div style="margin:0 20px 16px;background:var(--card);border-radius:16px;overflow:hidden;">
+      <div style="padding:0 16px;">` +
+      months.map(m => {
+        const mTotal = expenses.reduce((s,r)=>s+r.amount,0);
+        const isCur = m===curMonth;
+        // 항목별 미니
+        const detail = expenses.slice(0,3).map(r=>`<span style="font-size:10px;color:var(--text-sub);">${r.name} ${fmt(r.amount)}</span>`).join(' · ');
+        const more = expenses.length > 3 ? ` +${expenses.length-3}` : '';
+        return `<div style="display:flex;align-items:center;padding:10px 0;${m>1?'border-top:1px solid var(--border);':''}">
+          <div style="width:36px;font-size:13px;font-weight:${isCur?'800':'500'};color:${isCur?'var(--primary)':'var(--text-sub)'};">${m}월</div>
+          <div style="flex:1;font-size:10px;color:var(--text-sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detail}${more}</div>
+          <div style="font-weight:700;font-size:14px;color:var(--danger);font-variant-numeric:tabular-nums;">-${fmt(mTotal)}원</div>
+        </div>`;
+      }).join('') +
+      `</div>
+      <div style="padding:12px 16px;background:var(--bg);display:flex;justify-content:space-between;border-top:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;">연간 합계</span>
+        <span style="font-weight:800;font-size:15px;color:var(--danger);">-${fmt(totalAnnualExp)}원</span>
+      </div></div>`;
+  }
+
+  // 저축 연간 표
+  html += sectionHeader('🐖 저축 연간', `monthlySavingsSortMode=!monthlySavingsSortMode;renderMonthly()`, 'openSavingsItemModal()', monthlySavingsSortMode?'완료':'순서편집');
+  if (savItems.length === 0) {
+    html += emptyBox('저축 항목을 추가해보세요');
+  } else {
+    const yearTotal = savItems.reduce((s,item)=>s+getYearTotal(item.id,year),0);
+    const yearTarget = savItems.reduce((s,item)=>s+(item.target||0)*12,0);
+    const yearPct = yearTarget>0?Math.round(yearTotal/yearTarget*100):null;
+    html += `<div style="margin:0 20px 12px;background:var(--card);border-radius:16px;overflow:hidden;">
+      ${yearTarget>0?`<div style="padding:12px 16px;background:var(--bg);">
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px;">
+          <div style="height:100%;width:${Math.min(100,yearPct)}%;background:${yearPct>=100?'var(--success)':'var(--primary)'};border-radius:3px;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-sub);">
+          <span>목표 ${fmt(yearTarget)}원</span><span style="color:var(--primary);font-weight:700;">${yearPct}% 달성</span>
+        </div>
+      </div>`:''}
+      <div style="padding:0 16px;">` +
+      Array.from({length:12},(_,i)=>i+1).map(m => {
+        const mTotal = savItems.reduce((s,item)=>{const l=getSavingsLog(item.id,year,m);return s+(l?l.amount:0);},0);
+        const mTarget = savItems.reduce((s,item)=>s+(item.target||0),0);
+        const isCur = m===(currentMonth.getMonth()+1);
+        const detail = savItems.filter(item=>{const l=getSavingsLog(item.id,year,m);return l&&l.amount>0;})
+          .map(item=>{const l=getSavingsLog(item.id,year,m);return `${item.icon||'🐖'} ${fmt(l.amount)}`;}).join(' · ');
+        return `<div style="display:flex;align-items:center;padding:10px 0;${m>1?'border-top:1px solid var(--border);':''}">
+          <div style="width:36px;font-size:13px;font-weight:${isCur?'800':'500'};color:${isCur?'var(--primary)':'var(--text-sub)'};">${m}월</div>
+          <div style="flex:1;font-size:10px;color:var(--text-sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detail||''}</div>
+          <div style="font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;color:${mTotal>0?'var(--primary)':'var(--text-placeholder)'};">${mTotal>0?fmt(mTotal)+'원':'—'}</div>
+        </div>`;
+      }).join('') +
+      `</div>
+      <div style="padding:12px 16px;background:var(--bg);display:flex;justify-content:space-between;border-top:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;">연간 합계</span>
+        <span style="font-weight:800;font-size:15px;color:var(--primary);">${fmt(yearTotal)}원</span>
+      </div></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// 헬퍼
+function sectionHeader(title, sortFn, addFn, sortLabel) {
+  return `<div style="padding:12px 20px 8px;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:13px;font-weight:700;">${title}</span>
+    <div style="display:flex;gap:8px;">
+      ${sortFn?`<button onclick="${sortFn}" style="background:none;border:none;color:var(--text-sub);font-size:12px;font-weight:600;">${sortLabel||'순서편집'}</button>`:''}
+      ${addFn?`<button onclick="${addFn}" style="background:none;border:none;color:var(--primary);font-size:13px;font-weight:600;">+ 추가</button>`:''}
+    </div>
+  </div>`;
+}
+function emptyBox(text) {
+  return `<div style="margin:0 20px 16px;padding:14px;background:var(--card);border-radius:14px;color:var(--text-placeholder);font-size:13px;text-align:center;">${text}</div>`;
+}
+function savingsMonthSection(savItems, year, month) {
+  let html = sectionHeader('🐖 저축', `monthlySavingsSortMode=!monthlySavingsSortMode;renderMonthly()`, 'openSavingsItemModal()', monthlySavingsSortMode?'완료':'순서편집');
+  if (savItems.length === 0) return html + emptyBox('저축 항목을 추가해보세요');
+  if (monthlySavingsSortMode) {
+    html += `<div class="sort-mode-hint">≡ 드래그로 순서 변경</div>
+      <div id="savings-sort-list" style="margin:0 20px 20px;background:var(--card);border-radius:18px;overflow:hidden;">` +
+      savItems.map(item=>`<div class="tx-item" data-id="${item.id}" style="user-select:none;">
+        <span class="drag-handle">≡</span>
+        <div style="font-size:24px;width:36px;text-align:center;">${item.icon||'🐖'}</div>
+        <div class="tx-info"><div class="tx-category">${escapeHtml(item.name)}</div>${item.target?`<div class="tx-memo">월 목표 ${fmt(item.target)}원</div>`:''}</div>
+        <button onclick="openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-sub);font-size:18px;padding:4px;">✎</button>
+      </div>`).join('') + `</div>`;
+    setTimeout(()=>{
+      const sortEl=document.getElementById('savings-sort-list');
+      if(!sortEl||!window.Sortable)return;
+      if(_sortables.savingsM)_sortables.savingsM.destroy();
+      _sortables.savingsM=Sortable.create(sortEl,{handle:'.drag-handle',animation:150,onEnd(){
+        const ids=[...sortEl.querySelectorAll('[data-id]')].map(e=>e.dataset.id);
+        if(!ids.length)return;
+        const r=ids.map(id=>state.savingsItems.find(x=>x.id===id)).filter(Boolean);
+        if(r.length){state.savingsItems=r;save();}
+      }});
+    },50);
+    return html;
+  }
+  html += `<div style="margin:0 20px 20px;background:var(--card);border-radius:16px;overflow:hidden;">` +
+    savItems.map((item,idx)=>{
+      const log=getSavingsLog(item.id,year,month);
+      const amount=log?log.amount:0, target=item.target||0;
+      const pct=target>0?Math.min(100,Math.round(amount/target*100)):null;
+      return `<div style="padding:14px 16px;display:flex;align-items:center;gap:12px;${idx>0?'border-top:1px solid var(--border);':''}">
+        <div style="width:38px;height:38px;background:var(--primary-light);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;" onclick="openSavingsLogModal('${item.id}',${year},${month})">${item.icon||'🐖'}</div>
+        <div style="flex:1;min-width:0;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
+          <div style="font-size:14px;font-weight:700;">${escapeHtml(item.name)}</div>
+          ${pct!==null?`<div style="margin-top:5px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=100?'var(--success)':'var(--primary)'};border-radius:2px;"></div></div>`:''}
+        </div>
+        <div style="text-align:right;font-variant-numeric:tabular-nums;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
+          <div style="font-weight:800;font-size:15px;color:${amount>0?'var(--primary)':'var(--text-placeholder)'};">${amount>0?fmt(amount)+'원':'미입력'}</div>
+          ${target>0?`<div style="font-size:11px;color:var(--text-sub);">목표 ${fmt(target)}원</div>`:''}
+        </div>
+        ${target>0?`<button onclick="quickSavingsComplete('${item.id}',${year},${month},${target})" style="background:${amount>=target?'var(--success)':'var(--border)'};color:${amount>=target?'white':'var(--text-sub)'};border:none;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;">${amount>=target?'✓':'완납'}</button>`:''}
+        <button onclick="openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-placeholder);font-size:16px;padding:2px;">✎</button>
+      </div>`;
+    }).join('') + `</div>`;
+  return html;
+}
 function openCategoryManageModal() {
   catManageType = 'expense';
   document.querySelectorAll('[data-catmg]').forEach(b => b.classList.toggle('active', b.dataset.catmg === 'expense'));
@@ -3863,153 +4255,7 @@ function getYearTotal(itemId, year) {
   return total;
 }
 
-function renderSavings() {
-  const el = document.getElementById('savings-content');
-  if (!el) return;
-  const items = state.savingsItems || [];
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth() + 1;
-
-  // 뷰 모드 토글
-  const modeHtml = `<div style="padding:0 20px 14px;display:flex;gap:8px;align-items:center;">
-    <div class="segmented" style="flex:1;">
-      <button class="${savingsViewMode==='month'?'active':''}" onclick="savingsSortMode=false;savingsViewMode='month';renderSavings()">월별</button>
-      <button class="${savingsViewMode==='year'?'active':''}" onclick="savingsSortMode=false;savingsViewMode='year';renderSavings()">연간</button>
-    </div>
-    <button onclick="toggleSavingsSortMode()" style="padding:8px 14px;background:${savingsSortMode?'var(--primary)':'var(--bg)'};color:${savingsSortMode?'white':'var(--text-sub)'};border:1.5px solid ${savingsSortMode?'var(--primary)':'var(--border-line)'};border-radius:10px;font-size:13px;font-weight:600;">${savingsSortMode?'완료':'순서편집'}</button>
-  </div>`;
-
-  if (items.length === 0) {
-    el.innerHTML = modeHtml + `<div class="empty"><span class="empty-emoji">🐖</span><div class="empty-title">저축 항목을 추가해보세요</div></div>`;
-    return;
-  }
-
-  // 정렬 모드
-  if (savingsSortMode) {
-    el.innerHTML = modeHtml +
-      `<div class="sort-mode-hint">≡ 핸들을 잡고 드래그해서 순서를 바꿔보세요</div>
-      <div id="savings-sort-list" style="margin:0 20px 12px;background:var(--card);border-radius:18px;overflow:hidden;">` +
-      items.map(item => `
-        <div class="tx-item" data-id="${item.id}" style="user-select:none;">
-          <span class="drag-handle">≡</span>
-          <div style="font-size:24px;width:36px;text-align:center;">${item.icon||'🐖'}</div>
-          <div class="tx-info"><div class="tx-category">${escapeHtml(item.name)}</div>${item.target?`<div class="tx-memo">월 목표 ${fmt(item.target)}원</div>`:''}</div>
-          <button onclick="openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-sub);font-size:20px;padding:4px 8px;">✎</button>
-        </div>`).join('') +
-      `</div>`;
-    setTimeout(() => {
-      const sortEl = document.getElementById('savings-sort-list');
-      if (!sortEl || !window.Sortable) return;
-      if (_sortables.savings) _sortables.savings.destroy();
-      _sortables.savings = Sortable.create(sortEl, {
-        handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost',
-        onEnd() {
-          const ids = [...sortEl.querySelectorAll('[data-id]')].map(e => e.dataset.id);
-          if (!ids.length) return;
-          const reordered = ids.map(id => state.savingsItems.find(x => x.id === id)).filter(Boolean);
-          if (reordered.length) { state.savingsItems = reordered; save(); }
-        }
-      });
-    }, 50);
-    return;
-  }
-
-  if (savingsViewMode === 'month') {
-    // 이번 달 합계
-    const monthTotal = items.reduce((s, item) => {
-      const log = getSavingsLog(item.id, year, month);
-      return s + (log ? log.amount : 0);
-    }, 0);
-    const targetTotal = items.reduce((s, item) => s + (item.target||0), 0);
-
-    let html = modeHtml;
-    // 요약 카드
-    html += `<div style="margin:0 20px 14px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
-      <div style="font-size:13px;opacity:.8;margin-bottom:6px;">${year}년 ${month}월 저축</div>
-      <div style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;">${fmt(monthTotal)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div>
-      ${targetTotal>0?`<div style="font-size:13px;opacity:.7;margin-top:6px;">목표 ${fmt(targetTotal)}원 · ${monthTotal>=targetTotal?'✅ 달성':''+Math.round(monthTotal/targetTotal*100)+'% 달성'}</div>`:''}
-    </div>`;
-
-    // 항목별
-    html += items.map(item => {
-      const log = getSavingsLog(item.id, year, month);
-      const amount = log ? log.amount : 0;
-      const target = item.target || 0;
-      const pct = target > 0 ? Math.min(100, Math.round(amount/target*100)) : null;
-      const cls = pct !== null ? (pct>=100?'':'') : '';
-      return `<div style="margin:0 20px 10px;background:var(--card);border-radius:16px;overflow:hidden;">
-        <div style="padding:14px 16px;display:flex;align-items:center;gap:12px;">
-          <div style="width:42px;height:42px;background:var(--primary-light);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;" onclick="openSavingsLogModal('${item.id}', ${year}, ${month})">${item.icon||'🐖'}</div>
-          <div style="flex:1;min-width:0;" onclick="openSavingsLogModal('${item.id}', ${year}, ${month})">
-            <div style="font-size:15px;font-weight:700;">${escapeHtml(item.name)}</div>
-            ${log&&log.memo?`<div style="font-size:12px;color:var(--text-sub);">${escapeHtml(log.memo)}</div>`:''}
-            ${pct!==null?`<div style="margin-top:6px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=100?'var(--success)':'var(--primary)'};border-radius:3px;transition:width .4s;"></div></div>`:''}
-          </div>
-          <div style="text-align:right;" onclick="openSavingsLogModal('${item.id}', ${year}, ${month})">
-            <div style="font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;color:${amount>0?'var(--primary)':'var(--text-placeholder)'};">${amount>0?fmt(amount)+'원':'미입력'}</div>
-            ${target>0?`<div style="font-size:11px;color:var(--text-sub);">목표 ${fmt(target)}원</div>`:''}
-          </div>
-          ${target>0?`<button onclick="quickSavingsComplete('${item.id}', ${year}, ${month}, ${target})" style="background:${amount>=target?'var(--success)':'var(--border)'};color:${amount>=target?'white':'var(--text-sub)'};border:none;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;flex-shrink:0;" title="완납">${amount>=target?'✓완납':'완납'}</button>`:''}
-          <button onclick="openSavingsItemModal('${item.id}')" style="background:none;border:none;color:var(--text-placeholder);font-size:18px;padding:4px;">✎</button>
-        </div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = html;
-
-  } else {
-    // 연간 뷰 - 월별 통합 총액
-    const yearTotal = items.reduce((s, item) => s + getYearTotal(item.id, year), 0);
-    const yearTarget = items.reduce((s, item) => s + (item.target||0)*12, 0);
-    const yearPct = yearTarget > 0 ? Math.round(yearTotal/yearTarget*100) : null;
-    let html = modeHtml;
-    html += `<div style="margin:0 20px 14px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
-      <div style="font-size:13px;opacity:.8;margin-bottom:6px;">${year}년 연간 저축 합계</div>
-      <div style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;">${fmt(yearTotal)}<span style="font-size:16px;margin-left:2px;opacity:.9;">원</span></div>
-      ${yearTarget>0?`
-      <div style="margin-top:10px;height:6px;background:rgba(255,255,255,.2);border-radius:3px;overflow:hidden;">
-        <div style="height:100%;width:${Math.min(100,yearPct)}%;background:${yearPct>=100?'#4ADE80':'#60A5FA'};border-radius:3px;transition:width .4s;"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;opacity:.8;">
-        <span>연간 목표 ${fmt(yearTarget)}원</span>
-        <span>${yearPct}% 달성${yearPct>=100?' ✅':''}</span>
-      </div>`:''}
-      <div style="font-size:13px;opacity:.7;margin-top:6px;">월 평균 ${fmt(Math.round(yearTotal/12))}원</div>
-    </div>`;
-
-    // 월별 통합 표
-    html += `<div style="margin:0 20px 12px;background:var(--card);border-radius:16px;overflow:hidden;">
-      <div style="padding:12px 16px;background:var(--bg);font-size:13px;font-weight:700;">월별 저축 현황</div>
-      <div style="padding:0 16px;">` +
-      Array.from({length:12},(_,i)=>i+1).map(m => {
-        const monthTotal = items.reduce((s, item) => {
-          const log = getSavingsLog(item.id, year, m);
-          return s + (log ? log.amount : 0);
-        }, 0);
-        const isCurrent = m === month;
-        const hasSomething = monthTotal > 0;
-        // 항목별 미니 내역
-        const details = items.filter(item => {
-          const log = getSavingsLog(item.id, year, m);
-          return log && log.amount > 0;
-        }).map(item => {
-          const log = getSavingsLog(item.id, year, m);
-          return `<span style="font-size:11px;color:var(--text-sub);">${item.icon||'🐖'} ${fmt(log.amount)}</span>`;
-        }).join(' · ');
-        return `<div style="display:flex;align-items:center;padding:11px 0;${m>1?'border-top:1px solid var(--border);':''}">
-          <div style="width:40px;font-size:14px;font-weight:${isCurrent?'800':'500'};color:${isCurrent?'var(--primary)':'var(--text-sub)'};">${m}월</div>
-          <div style="flex:1;min-width:0;">
-            ${hasSomething?`<div style="font-size:11px;color:var(--text-sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${details}</div>`:''}
-          </div>
-          <div style="font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;color:${hasSomething?'var(--primary)':'var(--text-placeholder)'};">${hasSomething?fmt(monthTotal)+'원':'—'}</div>
-        </div>`;
-      }).join('') +
-      `</div></div>`;
-
-    el.innerHTML = html;
-  }
-}
-
+function renderSavings() { renderMonthly(); } // 정기관리 탭으로 통합
 function openSavingsItemModal(id) {
   const ICONS = SAV_ICONS;
   if (id) {
