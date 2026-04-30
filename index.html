@@ -4801,13 +4801,22 @@ function executeCardSettle() {
     createdAt:Date.now()
   });
 
-  // 차액이 양수면 → 미기록 카드 지출로 추가
+  // 차액이 양수면 → 미기록 카드 지출 추가
   if (diff > 0) {
     state.transactions.push({
       id:'t_cardmisc_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
       type:'expense', amount:diff, date,
       accountId:cardId,
       memo:`${cardName} 기타 지출`, category:'기타',
+      createdAt:Date.now()
+    });
+  } else if (diff < 0) {
+    // 혜택/할인 → 카드 잔액 0으로 맞추기 위해 수입 처리
+    state.transactions.push({
+      id:'t_cardbenefit_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      type:'income', amount:Math.abs(diff), date,
+      accountId:cardId,
+      memo:`${cardName} 카드 혜택/할인`, category:'기타수입',
       createdAt:Date.now()
     });
   }
