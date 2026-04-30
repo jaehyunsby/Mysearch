@@ -1695,8 +1695,9 @@ function renderCashFlow(container) {
   const savItems = state.savingsItems || [];
   const totalSav = savItems.reduce((s,item) => {
     const log = getSavingsLog(item.id, year, month);
-    return s + (log ? log.amount : (item.target||0));
+    return s + (log ? log.amount : 0); // 실제 입력된 금액만
   }, 0);
+  const totalSavTarget = savItems.reduce((s,item) => s + (item.target||0), 0);
 
   // 실제 지출 (거래내역 기반)
   const totalActualExp = txs.filter(t => t.type==='expense').reduce((s,t) => s+t.amount, 0);
@@ -3820,15 +3821,17 @@ function renderMonthly() {
 function renderMonthlyMonth(el, incomes, expenses, savItems, year, month, toggleHtml) {
   const totalInc = incomes.reduce((s,r) => s+r.amount, 0);
   const totalExp = expenses.reduce((s,r) => s+r.amount, 0);
-  const totalSav = savItems.reduce((s, item) => {
+  const totalSavActual = savItems.reduce((s, item) => {
     const log = getSavingsLog(item.id, year, month);
-    return s + (log ? log.amount : (item.target||0));
+    return s + (log ? log.amount : 0); // 실제 입력된 금액만
   }, 0);
-  const disposable = totalInc - totalExp - totalSav;
+  const totalSavTarget = savItems.reduce((s, item) => s + (item.target||0), 0);
 
   let html = toggleHtml;
 
-  // 요약 카드
+  // 요약 카드 - 실제 저축 기준
+  const savPct = totalSavTarget > 0 ? Math.round(totalSavActual/totalSavTarget*100) : null;
+  const surplus = totalInc - totalExp - totalSavActual;
   html += `<div style="margin:0 20px 16px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
     <div style="font-size:13px;opacity:.8;margin-bottom:12px;">${year}년 ${month}월 월간 현황</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
@@ -3841,12 +3844,14 @@ function renderMonthlyMonth(el, incomes, expenses, savItems, year, month, toggle
         <div style="font-size:17px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExp)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 저축</div>
-        <div style="font-size:17px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">-${fmt(totalSav)}원</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 실제 저축</div>
+        <div style="font-size:17px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">${fmt(totalSavActual)}원</div>
+        ${savPct!==null?`<div style="font-size:10px;opacity:.65;margin-top:3px;">목표 ${fmt(totalSavTarget)}원 · ${savPct}%</div>`:''}
       </div>
       <div style="background:rgba(255,255,255,.12);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.2);">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">✨ 가처분</div>
-        <div style="font-size:17px;font-weight:800;color:${disposable>=0?'#4ADE80':'#F87171'};font-variant-numeric:tabular-nums;">${disposable>=0?'+':''}${fmt(disposable)}원</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💵 남은 현금</div>
+        <div style="font-size:17px;font-weight:800;color:${surplus>=0?'#4ADE80':'#F87171'};font-variant-numeric:tabular-nums;">${surplus>=0?'+':''}${fmt(surplus)}원</div>
+        <div style="font-size:10px;opacity:.6;margin-top:3px;">수입 − 지출 − 저축</div>
       </div>
     </div>
   </div>`;
