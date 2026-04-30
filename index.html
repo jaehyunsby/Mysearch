@@ -1749,6 +1749,9 @@ function renderStats() {
   } else if (statsTab === 'cashflow') {
     renderCashFlow(content);
   } else {
+    // 연별통계
+    const d = new Date(currentMonth);
+    const months = [];
     for (let i = 5; i >= 0; i--) { const m = new Date(d); m.setMonth(m.getMonth()-i); months.push(m); }
     const incomeData = months.map(m => txForMonth(m).filter(t => t.type === 'income').reduce((s,t) => s+t.amount, 0));
     const expenseData = months.map(m => txForMonth(m).filter(t => t.type === 'expense').reduce((s,t) => s+t.amount, 0));
@@ -4038,29 +4041,39 @@ function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, m
   let html = toggleHtml;
 
   // 요약 카드 - 실제 저축 기준
+  // 고정지출 제외 실제 지출 (거래내역 기반, 자동납부 제외)
+  const txs2 = txForMonth(currentMonth);
+  const totalExtraExp = txs2.filter(t => t.type==='expense' && !t.autoRecurring && !t.autoSavings).reduce((s,t)=>s+t.amount,0);
+
   const savPct = totalSavTarget > 0 ? Math.round(totalSavActual/totalSavTarget*100) : null;
-  const surplus = totalInc - totalExpPaid - totalSavActual;
+  const surplus = totalInc - totalExpPaid - totalSavActual - totalExtraExp;
   html += `<div style="margin:0 20px 16px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
     <div style="font-size:13px;opacity:.8;margin-bottom:12px;">${year}년 ${month}월 월간 현황</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
         <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 수입</div>
-        <div style="font-size:17px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalInc)}원</div>
+        <div style="font-size:16px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalInc)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
         <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출 납부</div>
-        <div style="font-size:17px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExpPaid)}원</div>
-        <div style="font-size:10px;opacity:.65;margin-top:3px;">${paidCount}/${totalCount}건 · 계획 ${fmt(totalExpPlanned)}원</div>
+        <div style="font-size:16px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExpPaid)}원</div>
+        <div style="font-size:10px;opacity:.65;margin-top:2px;">${paidCount}/${totalCount}건 · 계획 ${fmt(totalExpPlanned)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
         <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 실제 저축</div>
-        <div style="font-size:17px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">${fmt(totalSavActual)}원</div>
-        ${savPct!==null?`<div style="font-size:10px;opacity:.65;margin-top:3px;">목표 ${fmt(totalSavTarget)}원 · ${savPct}%</div>`:''}
+        <div style="font-size:16px;font-weight:800;color:#60A5FA;font-variant-numeric:tabular-nums;">${fmt(totalSavActual)}원</div>
+        ${savPct!==null?`<div style="font-size:10px;opacity:.65;margin-top:2px;">목표 ${fmt(totalSavTarget)}원 · ${savPct}%</div>`:''}
       </div>
-      <div style="background:rgba(255,255,255,.12);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.2);">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💵 남은 현금</div>
-        <div style="font-size:17px;font-weight:800;color:${surplus>=0?'#4ADE80':'#F87171'};font-variant-numeric:tabular-nums;">${surplus>=0?'+':''}${fmt(surplus)}원</div>
-        <div style="font-size:10px;opacity:.6;margin-top:3px;">수입 − 납부 − 저축</div>
+      <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🛒 기타 지출</div>
+        <div style="font-size:16px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExtraExp)}원</div>
+        <div style="font-size:10px;opacity:.65;margin-top:2px;">고정지출 제외</div>
+      </div>
+    </div>
+    <div style="background:rgba(255,255,255,.12);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.2);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;opacity:.8;">💵 남은 현금 (수입−고정납부−저축−기타지출)</span>
+        <span style="font-size:17px;font-weight:800;color:${surplus>=0?'#4ADE80':'#F87171'};font-variant-numeric:tabular-nums;">${surplus>=0?'+':''}${fmt(surplus)}원</span>
       </div>
     </div>
   </div>`;
