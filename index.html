@@ -4276,7 +4276,16 @@ function savingsMonthSection(savItems, year, month) {
         <div style="flex:1;min-width:0;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
           <div style="font-size:14px;font-weight:700;">${escapeHtml(item.name)}</div>
           ${(item.fromAssetId||item.toAssetId)?`<div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${item.fromAssetId?(getAsset(item.fromAssetId)||{}).name||'':''} ${item.fromAssetId&&item.toAssetId?'→':''} ${item.toAssetId?(getAsset(item.toAssetId)||{}).name||'':''}</div>`:''}
-          ${(()=>{const ta=item.toAssetId?getAsset(item.toAssetId):null;return ta&&ta.type==='보험'&&ta.insurance?`<div style="font-size:11px;color:var(--primary);margin-top:2px;font-weight:600;">${Number(ta.insurance.payCount)||0}회차 납입 · 총 ${fmt(Number(ta.insurance.totalPaid)||0)}원</div>`:'';})()}
+          ${(()=>{
+            const ta=item.toAssetId?getAsset(item.toAssetId):null;
+            if(!ta||ta.type!=='보험'||!ta.insurance) return '';
+            const log=getSavingsLog(item.id,year,month);
+            const paid=Number(ta.insurance.payCount)||0;
+            // 이번달 납부 안했으면 다음회차(paid+1) 예정 표시
+            const displayCount = log ? paid : paid+1;
+            const totalPaid=Number(ta.insurance.totalPaid)||0;
+            return `<div style="font-size:11px;color:var(--primary);margin-top:2px;font-weight:600;">${displayCount}회차 ${log?'납입':'예정'} · 총 ${fmt(totalPaid)}원</div>`;
+          })()}
           ${pct!==null?`<div style="margin-top:5px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=100?'var(--success)':'var(--primary)'};border-radius:2px;"></div></div>`:''}
         </div>
         <div style="text-align:right;font-variant-numeric:tabular-nums;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
