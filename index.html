@@ -4702,7 +4702,7 @@ function executeCardSettle() {
   const cardName = (getAsset(cardId)||{}).name||'카드';
   const fromName = (getAsset(fromId)||{}).name||'계좌';
 
-  // 1. 이체: 계좌 → 카드 (실결제금)
+  // 이체: 계좌 → 카드 (실결제금만)
   state.transactions.push({
     id:'t_settle_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
     type:'transfer', amount:actual, date,
@@ -4711,29 +4711,11 @@ function executeCardSettle() {
     createdAt:Date.now()
   });
 
-  // 2. 차액 처리
-  if (diff > 0) {
-    // 카드 혜택 → 카드 자산에 수입
-    state.transactions.push({
-      id:'t_benefit_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-      type:'income', amount:diff, date,
-      accountId:cardId,
-      memo:`${cardName} 할인혜택`, category:'카드혜택',
-      createdAt:Date.now()
-    });
-  } else if (diff < 0) {
-    // 추가 지출 → 카드에서 지출
-    state.transactions.push({
-      id:'t_extra_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-      type:'expense', amount:Math.abs(diff), date,
-      accountId:cardId,
-      memo:`${cardName} 추가 지출`, category:'기타',
-      createdAt:Date.now()
-    });
-  }
+  // 차액은 표기만 (거래 미생성)
+  const diffMsg = diff > 0 ? `\n💰 카드 혜택 ${fmt(diff)}원` : diff < 0 ? `\n⚠️ 기록 외 지출 ${fmt(Math.abs(diff))}원` : '';
 
   save(); closeCardSettleModal(); render();
-  alert(`✓ 정산 완료\n${fromName} → ${cardName} ${fmt(actual)}원${diff>0?`\n혜택 ${fmt(diff)}원 수입 처리`:diff<0?`\n추가 ${fmt(Math.abs(diff))}원 지출 처리`:''}`);
+  alert(`✓ 정산 완료\n${fromName} → ${cardName} ${fmt(actual)}원${diffMsg}`);
 }
 
 // ========== EXPORT ==========
