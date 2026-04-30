@@ -4025,13 +4025,13 @@ function renderMonthly() {
 
 function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, month, toggleHtml) {
   const totalExpPlanned = expenses.filter(r=>r.active).reduce((s,r) => s+r.amount, 0);
-  // 실제 납부완료된 금액
-  const totalExpPaid = expenses.filter(r=>r.active).reduce((s,r) => {
+  // 모든 항목 기준으로 납부 집계 (active 무관)
+  const totalExpPaid = expenses.reduce((s,r) => {
     const log = getRecLog(r.id, year, month);
     return s + (log && log.paid ? log.amount : 0);
   }, 0);
-  const paidCount = expenses.filter(r=>r.active && getRecLog(r.id,year,month)?.paid).length;
-  const totalCount = expenses.filter(r=>r.active).length;
+  const paidCount = expenses.filter(r => { const l=getRecLog(r.id,year,month); return l&&l.paid; }).length;
+  const totalCount = expenses.length;
   const totalSavActual = savItems.reduce((s, item) => {
     const log = getSavingsLog(item.id, year, month);
     return s + (log ? log.amount : 0); // 실제 입력된 금액만
@@ -4055,7 +4055,7 @@ function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, m
         <div style="font-size:16px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalInc)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출 납부</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출</div>
         <div style="font-size:16px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExpPaid)}원</div>
         <div style="font-size:10px;opacity:.65;margin-top:2px;">${paidCount}/${totalCount}건 · 계획 ${fmt(totalExpPlanned)}원</div>
       </div>
