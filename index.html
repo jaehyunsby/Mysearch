@@ -4702,37 +4702,27 @@ function onSettleAmountInput() {
   const cardId = document.getElementById('settle-card-select').value;
   if (!cardId) return;
   const actual = +document.getElementById('settle-amount').value || 0;
-  const txs = txForMonth(currentMonth);
+  if (!actual) { document.getElementById('settle-diff-info').style.display='none'; return; }
 
-  const fixedPaid = (state.recurring||[]).filter(r=>r.type==='expense'&&r.active&&r.accountId===cardId).reduce((s,r)=>{
-    const log=getRecLog(r.id,currentMonth.getFullYear(),currentMonth.getMonth()+1);
-    return s+(log&&log.paid?log.amount:0);
-  },0);
-  const cardMiscExp = txs.filter(t=>t.type==='expense'&&t.accountId===cardId&&!t.autoRecurring).reduce((s,t)=>s+t.amount,0);
-  const diff = actual - fixedPaid - cardMiscExp;
+  const currentCardBal = Math.abs(getAssetCurrentBalance(cardId));
+  const diff = actual - currentCardBal;
 
   const infoEl = document.getElementById('settle-diff-info');
   const textEl = document.getElementById('settle-diff-text');
-  if (actual > 0) {
-    infoEl.style.display = 'block';
-    let lines = [`고정지출 납부: ${fmt(fixedPaid)}원`, `기록된 기타지출: ${fmt(cardMiscExp)}원`];
-    if (diff > 0) {
-      infoEl.style.background = '#FFF3CD';
-      textEl.style.color = '#856404';
-      lines.push(`→ 미기록 기타지출 ${fmt(diff)}원 자동 추가`);
-    } else if (diff < 0) {
-      infoEl.style.background = '#E6F7EF';
-      textEl.style.color = 'var(--success)';
-      lines.push(`→ 카드 혜택 ${fmt(Math.abs(diff))}원`);
-    } else {
-      infoEl.style.background = 'var(--bg)';
-      textEl.style.color = 'var(--text-sub)';
-      lines.push('→ 딱 맞아요 ✓');
-    }
-    textEl.innerHTML = lines.join('<br>');
+  infoEl.style.display = 'block';
+  const lines = [`현재 카드 잔액: ${fmt(currentCardBal)}원`];
+  if (diff > 0) {
+    infoEl.style.background = '#F0F4FF'; textEl.style.color = '#3182F6';
+    lines.push(`→ 카드 잔액에 미포함된 지출 ${fmt(diff)}원 기타지출 추가`);
+    lines.push(`(고정지출·저축 중 카드 연결 미설정 항목 포함)`);
+  } else if (diff < 0) {
+    infoEl.style.background = '#E6F7EF'; textEl.style.color = 'var(--success)';
+    lines.push(`→ 카드 혜택/할인 ${fmt(Math.abs(diff))}원`);
   } else {
-    infoEl.style.display = 'none';
+    infoEl.style.background = 'var(--bg)'; textEl.style.color = 'var(--text-sub)';
+    lines.push('→ 딱 맞아요 ✓');
   }
+  textEl.innerHTML = lines.join('<br>');
 }
 
 function executeCardSettle() {
@@ -4750,21 +4740,24 @@ function executeCardSettle() {
   const fromName = (getAsset(fromId)||{}).name||'계좌';
 
   // 이번달 해당 카드로 납부완료된 고정지출 합계
-  const fixedPaid = (state.recurring||[])
-    .filter(r => r.type==='expense' && r.active)
-    .reduce((s,r) => {
-      const log = getRecLog(r.id, currentMonth.getFullYear(), currentMonth.getMonth()+1);
-      const isCardItem = r.accountId === cardId || r.payName;
-      return s + (log && log.paid && r.accountId === cardId ? log.amount : 0);
-    }, 0);
+  // 이번달 납부완료된 고정지출 중 해당 카드 연결된 것
+  const yr = currentMonth.getFullYear(), mo = currentMonth.getMonth()+1;
+  const fixedPaid = (state.recurring||[]).filter(r=>r.type==='expense').reduce((s,r)=>{
+    const log = getRecLog(r.id, yr, mo);
+    if (!log || !log.paid) return s;
+    // 연결 계좌가 해당 카드거나, payMethod가 카드이고 payName이 카드명 포함
+    const isThisCard = r.accountId === cardId;
+    return s + (isThisCard ? log.amount : 0);
+  }, 0);
 
-  // 카드 일반 지출 (고정지출 납부로 생성된 거래 제외)
+  // 카드로 직접 입력된 일반 지출 (납부 자동생성 제외)
   const cardMiscExp = txs.filter(t =>
-    t.type==='expense' && t.accountId===cardId && !t.autoRecurring
+    t.type==='expense' && t.accountId===cardId && !t.autoRecurring && !t.autoSavings
   ).reduce((s,t)=>s+t.amount,0);
 
-  // 차액 = 실결제금 - 고정납부 - 기록된 기타지출
-  const diff = actual - fixedPaid - cardMiscExp;
+  // 카드 잔액 기준으로 차액 계산 (더 정확)
+  const currentCardBal = Math.abs(getAssetCurrentBalance(cardId));
+  const diff = actual - currentCardBal;
 
   // 이체: 계좌 → 카드 (실결제금)
   state.transactions.push({
@@ -4788,10 +4781,8 @@ function executeCardSettle() {
 
   save(); closeCardSettleModal(); render();
   const msg = [`${fromName} → ${cardName} ${fmt(actual)}원 이체`];
-  if (fixedPaid > 0) msg.push(`고정지출 ${fmt(fixedPaid)}원`);
-  if (cardMiscExp > 0) msg.push(`기록된 지출 ${fmt(cardMiscExp)}원`);
-  if (diff > 0) msg.push(`미기록 기타지출 ${fmt(diff)}원 추가`);
-  else if (diff < 0) msg.push(`💰 카드 혜택 ${fmt(Math.abs(diff))}원`);
+  if (diff > 0) msg.push(`카드 미포함 지출 ${fmt(diff)}원 기타지출 추가`);
+  else if (diff < 0) msg.push(`💰 카드 혜택/할인 ${fmt(Math.abs(diff))}원`);
   alert('✓ 정산 완료\n' + msg.join('\n'));
 }
 
