@@ -619,6 +619,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="font-size:12px;color:var(--text-sub);margin-top:6px;">자산 선택 시 잔액 자동 차감</div>
       </div>
     </div>
+    <div class="form-group" id="rec-insurance-wrap" style="display:none;">
+      <label class="form-label">🛡 보험 연결 (납부 시 회차 자동 업데이트)</label>
+      <select class="form-input" id="rec-insurance-asset">
+        <option value="">연결 안함</option>
+      </select>
+    </div>
     <button class="btn-primary" onclick="saveRecurring()">저장</button>
     <button class="btn-danger" id="rec-delete-btn" onclick="deleteRecurring()" style="display:none;">삭제</button>
   </div>
@@ -1046,7 +1052,7 @@ let currentMonth = new Date(); currentMonth.setDate(1);
 let currentPage = 'home';
 let budgetSub = 'history';
 let txModal = {editingId:null,type:'expense',amount:0,accumulator:0,pendingOp:null,justEvaluated:false,category:null,subCategory:'',accountId:'',fromAccountId:'',toAccountId:'',date:null,memo:''};
-let recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:'', accountId:'', autoGen:true};
+let recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:'', accountId:'', autoGen:true, insuranceAssetId:''};
 let assetModal = {editingId:null, type:null, includeInTotal:true};
 let todoModal = {editingId:null, priority:0, recurring:false, recurringDay:1, recurType:'month', recurringMonth:1};
 let noteModal = {editingId:null, tags:[], color:'', folder:'', pinned:false};
@@ -1954,9 +1960,9 @@ function quickRecComplete(recId, year, month) {
   if (log && log.paid) {
     if (!confirm('완납을 취소할까요?')) return;
     if (log.transactionId) state.transactions = state.transactions.filter(t => t.id !== log.transactionId);
-    // 보험 자산 회차 -1
-    if (rec.accountId) {
-      const asset = getAsset(rec.accountId);
+    const insAssetId2 = rec.insuranceAssetId || (rec.accountId && (getAsset(rec.accountId)||{}).type === '보험' ? rec.accountId : null);
+    if (insAssetId2) {
+      const asset = getAsset(insAssetId2);
       if (asset && asset.type === '보험' && asset.insurance) {
         asset.insurance.payCount = Math.max(0, (Number(asset.insurance.payCount)||0) - 1);
         asset.insurance.totalPaid = Math.max(0, (Number(asset.insurance.totalPaid)||0) - log.amount);
@@ -1977,9 +1983,10 @@ function quickRecComplete(recId, year, month) {
     });
     state.recurringLogs[key] = {paid: true, transactionId: txId, amount: rec.amount, paidAt: Date.now()};
 
-    // 연결 자산이 보험이면 회차 +1, 총납입금 업데이트
-    if (rec.accountId) {
-      const asset = getAsset(rec.accountId);
+    // 보험 자산 회차 +1 (accountId 또는 insuranceAssetId가 보험 자산)
+    const insAssetId = rec.insuranceAssetId || (rec.accountId && (getAsset(rec.accountId)||{}).type === '보험' ? rec.accountId : null);
+    if (insAssetId) {
+      const asset = getAsset(insAssetId);
       if (asset && asset.type === '보험' && asset.insurance) {
         asset.insurance.payCount = (Number(asset.insurance.payCount)||0) + 1;
         asset.insurance.totalPaid = (Number(asset.insurance.totalPaid)||0) + rec.amount;
@@ -2331,7 +2338,7 @@ function openRecurringEditModal(id) {
   if (id) {
     const r = state.recurring.find(x => x.id === id);
     if (!r) return;
-    recModal = {editingId:id, type:r.type, category:r.category, payMethod: r.payMethod || '', payName: r.payName || '', accountId: r.accountId || '', autoGen: r.autoGen !== false};
+    recModal = {editingId:id, type:r.type, category:r.category, payMethod: r.payMethod || '', payName: r.payName || '', accountId: r.accountId || '', autoGen: r.autoGen !== false, insuranceAssetId: r.insuranceAssetId || ''};
     document.getElementById('rec-name').value = r.name;
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.dayOfMonth;
@@ -2344,7 +2351,7 @@ function openRecurringEditModal(id) {
     const tog = document.getElementById('rec-autogen-toggle');
     if (tog) tog.classList.toggle('active', r.autoGen !== false);
   } else {
-    recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:'', accountId:'', autoGen:true};
+    recModal = {editingId:null, type:'expense', category:null, payMethod:'', payName:'', accountId:'', autoGen:true, insuranceAssetId:''};
     document.getElementById('rec-name').value = '';
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = 1;
@@ -2389,6 +2396,16 @@ function setRecType(t) {
   document.getElementById('rec-type-expense').classList.toggle('active', t === 'expense');
   document.getElementById('rec-type-income').classList.toggle('active', t === 'income');
   if (recModal.category && !CATEGORIES[t].find(c => c.key === recModal.category)) recModal.category = null;
+  const insWrap = document.getElementById('rec-insurance-wrap');
+  if (insWrap) {
+    insWrap.style.display = t === 'expense' ? 'block' : 'none';
+    if (t === 'expense') {
+      const insAssets = (state.assets||[]).filter(a => a.type === '보험');
+      document.getElementById('rec-insurance-asset').innerHTML =
+        '<option value="">연결 안함</option>' + insAssets.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+      document.getElementById('rec-insurance-asset').value = recModal.insuranceAssetId || '';
+    }
+  }
   renderRecCategories();
 }
 function renderRecCategories() {
@@ -2406,8 +2423,9 @@ function saveRecurring() {
   if (!amount) { alert('금액 입력'); return; }
   if (!recModal.category) { alert('카테고리 선택'); return; }
   const payName = document.getElementById('rec-payname').value.trim();
-  if (recModal.editingId) { const r = state.recurring.find(x => x.id === recModal.editingId); if (r) Object.assign(r, {type:recModal.type, name, amount, category:recModal.category, dayOfMonth:day, accountId, payMethod:recModal.payMethod, payName, autoGen:recModal.autoGen}); }
-  else state.recurring.push({id:'rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), type:recModal.type, name, amount, category:recModal.category, accountId, dayOfMonth:day, payMethod:recModal.payMethod, payName, autoGen:recModal.autoGen, active:true, createdAt:today()});
+  const insuranceAssetId = document.getElementById('rec-insurance-asset')?.value || '';
+  if (recModal.editingId) { const r = state.recurring.find(x => x.id === recModal.editingId); if (r) Object.assign(r, {type:recModal.type, name, amount, category:recModal.category, dayOfMonth:day, accountId, payMethod:recModal.payMethod, payName, autoGen:recModal.autoGen, insuranceAssetId}); }
+  else state.recurring.push({id:'rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), type:recModal.type, name, amount, category:recModal.category, accountId, dayOfMonth:day, payMethod:recModal.payMethod, payName, autoGen:recModal.autoGen, insuranceAssetId, active:true, createdAt:today()});
   save(); generateRecurring(); closeRecurringEditModal(); renderRecurringList(); render();
 }
 function deleteRecurring() {
@@ -4003,7 +4021,14 @@ function renderMonthly() {
 }
 
 function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, month, toggleHtml) {
-  const totalExp = expenses.filter(r=>r.active).reduce((s,r) => s+r.amount, 0);
+  const totalExpPlanned = expenses.filter(r=>r.active).reduce((s,r) => s+r.amount, 0);
+  // 실제 납부완료된 금액
+  const totalExpPaid = expenses.filter(r=>r.active).reduce((s,r) => {
+    const log = getRecLog(r.id, year, month);
+    return s + (log && log.paid ? log.amount : 0);
+  }, 0);
+  const paidCount = expenses.filter(r=>r.active && getRecLog(r.id,year,month)?.paid).length;
+  const totalCount = expenses.filter(r=>r.active).length;
   const totalSavActual = savItems.reduce((s, item) => {
     const log = getSavingsLog(item.id, year, month);
     return s + (log ? log.amount : 0); // 실제 입력된 금액만
@@ -4014,17 +4039,18 @@ function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, m
 
   // 요약 카드 - 실제 저축 기준
   const savPct = totalSavTarget > 0 ? Math.round(totalSavActual/totalSavTarget*100) : null;
-  const surplus = totalInc - totalExp - totalSavActual;
+  const surplus = totalInc - totalExpPaid - totalSavActual;
   html += `<div style="margin:0 20px 16px;background:linear-gradient(135deg,#1F2937 0%,#3F4A5E 100%);border-radius:18px;padding:20px;color:white;">
     <div style="font-size:13px;opacity:.8;margin-bottom:12px;">${year}년 ${month}월 월간 현황</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 고정수입</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 수입</div>
         <div style="font-size:17px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalInc)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출</div>
-        <div style="font-size:17px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExp)}원</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💸 고정지출 납부</div>
+        <div style="font-size:17px;font-weight:800;color:#F87171;font-variant-numeric:tabular-nums;">-${fmt(totalExpPaid)}원</div>
+        <div style="font-size:10px;opacity:.65;margin-top:3px;">${paidCount}/${totalCount}건 · 계획 ${fmt(totalExpPlanned)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
         <div style="font-size:11px;opacity:.7;margin-bottom:4px;">🐖 실제 저축</div>
@@ -4034,7 +4060,7 @@ function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, m
       <div style="background:rgba(255,255,255,.12);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.2);">
         <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💵 남은 현금</div>
         <div style="font-size:17px;font-weight:800;color:${surplus>=0?'#4ADE80':'#F87171'};font-variant-numeric:tabular-nums;">${surplus>=0?'+':''}${fmt(surplus)}원</div>
-        <div style="font-size:10px;opacity:.6;margin-top:3px;">수입 − 지출 − 저축</div>
+        <div style="font-size:10px;opacity:.6;margin-top:3px;">수입 − 납부 − 저축</div>
       </div>
     </div>
   </div>`;
