@@ -1683,7 +1683,7 @@ function renderCashFlow(container) {
   const month = currentMonth.getMonth() + 1;
   const txs = txForMonth(currentMonth);
 
-  // 수입
+  // 수입 - 실제 거래내역 기반
   const incomes = txs.filter(t => t.type === 'income');
   const totalIncome = incomes.reduce((s,t) => s+t.amount, 0);
 
@@ -3798,8 +3798,11 @@ function renderMonthly() {
 
   const items = state.recurring || [];
   const allExpenses = items.filter(r => r.type === 'expense' && r.active);
-  const allIncomes = items.filter(r => r.type === 'income' && r.active);
   const savItems = state.savingsItems || [];
+  // 수입: 실제 거래내역 기반
+  const txs = txForMonth(currentMonth);
+  const actualIncomes = txs.filter(t => t.type === 'income');
+  const totalActualIncome = actualIncomes.reduce((s,t) => s+t.amount, 0);
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth() + 1;
 
@@ -3812,14 +3815,13 @@ function renderMonthly() {
   </div>`;
 
   if (monthlyViewMode === 'month') {
-    renderMonthlyMonth(el, allIncomes, allExpenses, savItems, year, month, toggleHtml);
+    renderMonthlyMonth(el, totalActualIncome, actualIncomes, allExpenses, savItems, year, month, toggleHtml);
   } else {
-    renderMonthlyYear(el, allIncomes, allExpenses, savItems, year, toggleHtml);
+    renderMonthlyYear(el, allExpenses, savItems, year, toggleHtml);
   }
 }
 
-function renderMonthlyMonth(el, incomes, expenses, savItems, year, month, toggleHtml) {
-  const totalInc = incomes.reduce((s,r) => s+r.amount, 0);
+function renderMonthlyMonth(el, totalInc, incomeTxs, expenses, savItems, year, month, toggleHtml) {
   const totalExp = expenses.reduce((s,r) => s+r.amount, 0);
   const totalSavActual = savItems.reduce((s, item) => {
     const log = getSavingsLog(item.id, year, month);
@@ -3856,11 +3858,25 @@ function renderMonthlyMonth(el, incomes, expenses, savItems, year, month, toggle
     </div>
   </div>`;
 
-  // 고정수입
-  html += sectionHeader('💰 고정수입', null, 'openRecurringEditModal()');
-  html += incomes.length
-    ? `<div class="tx-list" style="margin:0 20px 16px;">${incomes.map(r=>renderFixedItem(r)).join('')}</div>`
-    : emptyBox('고정수입을 추가해보세요');
+  // 수입 섹션 - 실제 거래내역 기반
+  html += sectionHeader('💰 수입', null, "openTxModal();setTxType('income')");
+  if (incomeTxs.length === 0) {
+    html += emptyBox('이번 달 수입 내역이 없어요');
+  } else {
+    // 카테고리별 그룹
+    const incByCat = {};
+    incomeTxs.forEach(t => { incByCat[t.category||'기타'] = (incByCat[t.category||'기타']||0) + t.amount; });
+    const sortedInc = Object.entries(incByCat).sort((a,b)=>b[1]-a[1]);
+    html += `<div style="margin:0 20px 16px;background:var(--card);border-radius:16px;overflow:hidden;">` +
+      sortedInc.map(([cat,amt],i) => {
+        const info = getCategoryInfo('income', cat);
+        return `<div style="padding:12px 16px;display:flex;align-items:center;gap:12px;${i>0?'border-top:1px solid var(--border);':''}">
+          <div style="width:36px;height:36px;background:${info.color}22;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">${info.emoji}</div>
+          <div style="flex:1;font-size:14px;font-weight:600;">${cat}</div>
+          <div style="font-weight:700;font-size:15px;color:var(--primary);font-variant-numeric:tabular-nums;">+${fmt(amt)}원</div>
+        </div>`;
+      }).join('') + `</div>`;
+  }
 
   // 고정지출
   html += sectionHeader('💸 고정지출', null, 'openRecurringEditModal()');
@@ -3888,8 +3904,13 @@ function renderMonthlyMonth(el, incomes, expenses, savItems, year, month, toggle
   el.innerHTML = html;
 }
 
-function renderMonthlyYear(el, incomes, expenses, savItems, year, toggleHtml) {
-  const totalAnnualInc = incomes.reduce((s,r)=>s+r.amount,0)*12;
+function renderMonthlyYear(el, expenses, savItems, year, toggleHtml) {
+  // 연간 수입: 각 월 실제 거래내역 합산
+  const months12 = Array.from({length:12},(_,i)=>i+1);
+  const totalAnnualInc = months12.reduce((s,m) => {
+    const d = new Date(year, m-1, 1);
+    return s + txForMonth(d).filter(t=>t.type==='income').reduce((ss,t)=>ss+t.amount,0);
+  }, 0);
   const totalAnnualExp = expenses.reduce((s,r)=>s+r.amount,0)*12;
   const totalAnnualSavTarget = savItems.reduce((s,i)=>s+(i.target||0),0)*12;
   const totalAnnualSavReal = Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>
@@ -3902,7 +3923,7 @@ function renderMonthlyYear(el, incomes, expenses, savItems, year, toggleHtml) {
     <div style="font-size:13px;opacity:.8;margin-bottom:12px;">${year}년 연간 현황</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
-        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 고정수입 (연)</div>
+        <div style="font-size:11px;opacity:.7;margin-bottom:4px;">💰 총 수입 (연)</div>
         <div style="font-size:15px;font-weight:800;color:#4ADE80;font-variant-numeric:tabular-nums;">+${fmt(totalAnnualInc)}원</div>
       </div>
       <div style="background:rgba(255,255,255,.08);border-radius:12px;padding:12px;">
@@ -3919,10 +3940,9 @@ function renderMonthlyYear(el, incomes, expenses, savItems, year, toggleHtml) {
       </div>
     </div>
   </div>`;
-
   // 고정지출 연간 표
   html += sectionHeader('💸 고정지출 연간', null, 'openRecurringEditModal()');
-  if (expenses.length === 0) {
+  if (!expenses.length) {
     html += emptyBox('고정지출을 추가해보세요');
   } else {
     const months = Array.from({length:12},(_,i)=>i+1);
