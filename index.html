@@ -1506,6 +1506,7 @@ function setBudgetSub(name) {
   budgetSub = name;
   document.querySelectorAll('[data-budget-sub]').forEach(b => b.classList.toggle('active', b.dataset.budgetSub === name));
   document.querySelectorAll('.budget-sub').forEach(p => p.classList.toggle('active', p.id === 'budget-sub-' + name));
+  updateFab();
   render();
 }
 function openBudgetAssets() { budgetSub = 'assets'; openPage('budget'); }
@@ -4167,6 +4168,7 @@ function savingsMonthSection(savItems, year, month) {
           ${(item.fromAssetId||item.toAssetId)?`<div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${item.fromAssetId?(getAsset(item.fromAssetId)||{}).name||'':''} ${item.fromAssetId&&item.toAssetId?'→':''} ${item.toAssetId?(getAsset(item.toAssetId)||{}).name||'':''}</div>`:''}
           ${(()=>{const ta=item.toAssetId?getAsset(item.toAssetId):null;return ta&&ta.type==='보험'&&ta.insurance?`<div style="font-size:11px;color:var(--primary);margin-top:2px;font-weight:600;">${Number(ta.insurance.payCount)||0}회차 납입 · 총 ${fmt(Number(ta.insurance.totalPaid)||0)}원</div>`:'';})()}
           ${pct!==null?`<div style="margin-top:5px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct>=100?'var(--success)':'var(--primary)'};border-radius:2px;"></div></div>`:''}
+        </div>
         <div style="text-align:right;font-variant-numeric:tabular-nums;" onclick="openSavingsLogModal('${item.id}',${year},${month})">
           <div style="font-weight:800;font-size:15px;color:${amount>0?'var(--primary)':'var(--text-placeholder)'};">${amount>0?fmt(amount)+'원':'미입력'}</div>
           ${target>0?`<div style="font-size:11px;color:var(--text-sub);">목표 ${fmt(target)}원</div>`:''}
