@@ -1915,33 +1915,33 @@ function renderFixedItem(r) {
   const payLabel = r.payName ? r.payName : (r.accountId ? (getAsset(r.accountId)||{}).name||'' : '');
   const sub = [r.category, `매달 ${r.dayOfMonth}일`, payLabel].filter(Boolean).join(' · ');
   const autoGenOff = r.autoGen === false ? ' <span style="font-size:10px;background:#FFF3CD;color:#856404;padding:1px 6px;border-radius:4px;font-weight:600;">직접입력</span>' : '';
-  const dimStyle = r.active ? '' : 'opacity:.4;';
 
-  // 지출 항목: 완납 버튼
+  // 지출 항목: 완납 버튼 (active 무관하게 항상 표시)
   if (r.type === 'expense') {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
     const today = new Date().getDate();
     const log = getRecLog(r.id, year, month);
-    const isPaid = log && log.paid;
+    const isPaid = !!(log && log.paid);
     const isOverdue = !isPaid && r.dayOfMonth < today;
-    return `<div class="tx-item" style="${dimStyle}" onclick="openRecurringEditModal('${r.id}')">
+    return `<div class="tx-item" onclick="openRecurringEditModal('${r.id}')">
       <div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div>
       <div class="tx-info">
         <div class="tx-category">${r.name}${autoGenOff}</div>
-        <div class="tx-memo">${sub}${isOverdue?` <span style="color:var(--danger);font-size:10px;font-weight:600;">⚠️ 미납</span>`:''}</div>
+        <div class="tx-memo">${sub}${isOverdue ? ` <span style="color:var(--danger);font-size:10px;font-weight:600;">⚠️ 미납</span>` : ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="tx-amount ${amtCls}">${sign}${fmt(r.amount)}원</div>
         <button onclick="event.stopPropagation();quickRecComplete('${r.id}',${year},${month})"
-          style="background:${isPaid?'var(--success)':'var(--border)'};color:${isPaid?'white':'var(--text-sub)'};border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;flex-shrink:0;">
-          ${isPaid?'✓납부':'납부'}
+          style="background:${isPaid ? 'var(--success)' : 'var(--border)'};color:${isPaid ? 'white' : 'var(--text-sub)'};border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;flex-shrink:0;">
+          ${isPaid ? '✓납부' : '납부'}
         </button>
       </div>
     </div>`;
   }
 
-  // 수입 항목: 기존 토글
+  // 수입 항목: 토글 (active 상태 표시)
+  const dimStyle = r.active ? '' : 'opacity:.4;';
   return `<div class="tx-item" style="${dimStyle}" onclick="openRecurringEditModal('${r.id}')">
     <div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div>
     <div class="tx-info"><div class="tx-category">${r.name}</div><div class="tx-memo">${sub}</div></div>
@@ -2009,7 +2009,7 @@ function renderPayDates() {
     const dayTotal = list.reduce((s,r)=>s+r.amount,0);
     const isToday = day===td, isPast = day<td;
     const ds = isToday?'background:var(--primary);color:white;':isPast?'background:var(--border);color:var(--text-sub);':'background:var(--primary-light);color:var(--primary);';
-    html += `<div style="margin:0 20px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--border-line);"><div style="padding:12px 16px;display:flex;align-items:center;gap:12px;background:var(--bg);"><div style="${ds}width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">${day}</div><div style="flex:1;"><div style="font-size:15px;font-weight:700;">${day}일 결제</div><div style="font-size:12px;color:var(--text-sub);">${list.length}건</div></div><div style="font-weight:700;font-size:15px;color:var(--danger);">-${fmt(dayTotal)}원</div></div><div style="background:var(--card);">${list.map(r=>{const info=getCategoryInfo(r.type,r.category);const pl=r.payName?r.payName:r.payMethod==='카드'?'💳':r.payMethod==='현금'?'🏦':'';const sub=[pl,r.category].filter(Boolean).join(' · ');return `<div class="tx-item" onclick="openRecurringEditModal('${r.id}')"><div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div><div class="tx-info"><div class="tx-category">${r.name}</div><div class="tx-memo">${sub}</div></div><div style="display:flex;align-items:center;gap:6px;"><div class="tx-amount expense">-${fmt(r.amount)}원</div><button onclick="event.stopPropagation();quickRecComplete('${r.id}',${year},${month})" style="background:${getRecLog(r.id,year,month)?.paid?'var(--success)':'var(--border)'};color:${getRecLog(r.id,year,month)?.paid?'white':'var(--text-sub)'};border:none;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;">${getRecLog(r.id,year,month)?.paid?'✓납부':'납부'}</button></div></div>`;}).join('')}</div></div>`;
+    html += `<div style="margin:0 20px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--border-line);"><div style="padding:12px 16px;display:flex;align-items:center;gap:12px;background:var(--bg);"><div style="${ds}width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">${day}</div><div style="flex:1;"><div style="font-size:15px;font-weight:700;">${day}일 결제</div><div style="font-size:12px;color:var(--text-sub);">${list.length}건</div></div><div style="font-weight:700;font-size:15px;color:var(--danger);">-${fmt(dayTotal)}원</div></div><div style="background:var(--card);">${list.map(r=>{const info=getCategoryInfo(r.type,r.category);const pl=r.payName?r.payName:r.payMethod==='카드'?'💳':r.payMethod==='현금'?'🏦':'';const sub=[pl,r.category].filter(Boolean).join(' · ');return `<div class="tx-item" onclick="openRecurringEditModal('${r.id}')"><div class="tx-icon" style="background:${info.color}22;">${info.emoji}</div><div class="tx-info"><div class="tx-category">${r.name}</div><div class="tx-memo">${sub}</div></div><div style="display:flex;align-items:center;gap:6px;"><div class="tx-amount expense">-${fmt(r.amount)}원</div><button onclick="event.stopPropagation();quickRecComplete('${r.id}',${year},${month})" style="background:${(getRecLog(r.id,year,month)&&getRecLog(r.id,year,month).paid)?'var(--success)':'var(--border)'};color:${(getRecLog(r.id,year,month)&&getRecLog(r.id,year,month).paid)?'white':'var(--text-sub)'};border:none;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;">${(getRecLog(r.id,year,month)&&getRecLog(r.id,year,month).paid)?'✓납부':'납부'}</button></div></div>`;}).join('')}</div></div>`;
   });
   const total = items.reduce((s,r)=>s+r.amount,0);
   html += `<div style="margin:0 20px 8px;padding:14px 16px;background:var(--card);border-radius:14px;display:flex;justify-content:space-between;"><span style="font-weight:600;">이번 달 합계</span><span style="font-weight:800;font-size:16px;color:var(--danger);">-${fmt(total)}원</span></div>`;
