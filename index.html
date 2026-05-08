@@ -1346,6 +1346,7 @@ async function handleChangePassword() {
     btn.disabled = false; btn.textContent = '변경';
   }
 }
+function showLoginOverlay() { document.getElementById('login-overlay').classList.add('active'); }
 function hideLoginOverlay() { document.getElementById('login-overlay').classList.remove('active'); }
 function toggleLoginMode() {
   loginMode = loginMode === 'signin' ? 'signup' : 'signin';
